@@ -3,20 +3,80 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Cover Snap</title>
+<title>Vice Cover — GTA-style poster maker</title>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
-<main class="app">
-  <section class="controls">
-    <h1>Cover Snap</h1>
-    <p>A photo and a caption, made into a square cover.</p>
-    <label>Photo <input id="photo" type="file" accept="image/*"></label>
-    <label>Caption <input id="caption" type="text" maxlength="40" value="Sunset Heist"></label>
-    <button id="export" type="button">Export PNG 1080 x 1080</button>
-    <p id="status" role="status"></p>
+<main class="app" id="app">
+  <section class="sidebar" id="sidebar">
+    <header class="brand">
+      <h1>VICE<span>COVER</span></h1>
+      <p class="tagline">Photo + caption &rarr; sliced-panel poster</p>
+    </header>
+
+    <div class="group">
+      <label class="drop" id="drop">
+        <input id="photos" type="file" accept="image/*" multiple hidden>
+        <span class="drop-plus">+</span>
+        <span>Drop / pick photos</span>
+        <span class="hint">one photo, or a different one per panel</span>
+      </label>
+    </div>
+
+    <div class="group">
+      <label for="caption">Caption</label>
+      <input id="caption" type="text" maxlength="40" value="SUNSET HEIST" autocomplete="off">
+      <label for="sub">Small line (optional)</label>
+      <input id="sub" type="text" maxlength="60" placeholder="e.g. WELCOME TO THE COAST" autocomplete="off">
+    </div>
+
+    <div class="group">
+      <div class="row">
+        <span class="row-label">Panels</span>
+        <div class="seg" id="panelCount" role="group" aria-label="Panel count">
+          <button type="button" data-n="3">3</button>
+          <button type="button" data-n="4" class="on">4</button>
+          <button type="button" data-n="5">5</button>
+        </div>
+      </div>
+      <div class="row">
+        <span class="row-label">Warmth</span>
+        <input id="warmth" type="range" min="0" max="100" value="62">
+      </div>
+    </div>
+
+    <div class="group panel-editor" id="panelEditor">
+      <div class="row">
+        <span class="row-label" id="panelLabel">Panel 1 of 4</span>
+        <div class="pager">
+          <button type="button" id="prevPanel" aria-label="Previous panel">&larr;</button>
+          <button type="button" id="nextPanel" aria-label="Next panel">&rarr;</button>
+        </div>
+      </div>
+      <div class="photos" id="photoPick" aria-label="Pick a photo for this panel"></div>
+      <label class="slider">Zoom <span id="zoomVal">1.6&times;</span>
+        <input id="zoom" type="range" min="1" max="3.5" step="0.01" value="1.6">
+      </label>
+      <label class="slider">Pan X <span id="oxVal">0</span>
+        <input id="offsetX" type="range" min="-100" max="100" step="1" value="0">
+      </label>
+      <label class="slider">Pan Y <span id="oyVal">0</span>
+        <input id="offsetY" type="range" min="-100" max="100" step="1" value="0">
+      </label>
+      <p class="hint">Drag on the poster to pan this panel&rsquo;s photo; click a panel to select it.</p>
+    </div>
+
+    <div class="group exports">
+      <button type="button" id="export-sq">Export 1080 &times; 1080</button>
+      <button type="button" id="export-st">Export 1080 &times; 1350</button>
+      <button type="button" id="export-w">Export 1920 &times; 1080</button>
+      <p id="status" role="status"></p>
+    </div>
   </section>
-  <canvas id="cover" width="1080" height="1080" aria-label="The cover"></canvas>
+
+  <section class="stage" id="stage">
+    <canvas id="preview" width="720" height="900" aria-label="Poster preview"></canvas>
+  </section>
 </main>
 <script type="module" src="./src/main.js"></script>
 </body>
