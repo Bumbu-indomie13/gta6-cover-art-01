@@ -19,6 +19,20 @@ import { buildDossier } from './vendor/makefun-app.ts';
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
+// Fail fast, before any copying, if either half of the entry is missing: the app's entry page or
+// the screenshots folder. A clear message up front beats a dossier build failure further in.
+for (const [path, what] of [
+  [join(here, 'app', 'index.html'), 'app/index.html'],
+  [join(here, 'screenshots'), 'screenshots/'],
+] as const) {
+  if (!existsSync(path)) {
+    throw new Error(
+      `missing ${what} — an entry needs app/index.html and screenshots/ ` +
+        '(3 or 4 renders, the first by name the cover)',
+    );
+  }
+}
+
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
