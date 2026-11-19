@@ -10,39 +10,14 @@
 // Serve it locally with `node serve.ts`, then open http://localhost:8080.
 // Outside the grader's container, MAKEFUN_OUTPUT_DIR stands in for /output:
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
-// v1.1.0 — softened the sunset grade in app/src/cover.js (less red, orange-to-pink spread).
 
-import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildDossier, readAppTree } from './vendor/makefun-app.ts';
+import { buildDossier } from './vendor/makefun-app.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
-
-// Fail fast, before any copying, if either half of the entry is missing: the app's entry page or
-// the screenshots folder. A clear message up front beats a dossier build failure further in.
-for (const [path, what] of [
-  [join(here, 'app', 'index.html'), 'app/index.html'],
-  [join(here, 'screenshots'), 'screenshots/'],
-] as const) {
-  if (!existsSync(path)) {
-    throw new Error(
-      `missing ${what} — an entry needs app/index.html and screenshots/ ` +
-        '(3 or 4 renders, the first by name the cover)',
-    );
-  }
-}
-
-const shots = readdirSync(join(here, 'screenshots'), { withFileTypes: true })
-  .filter((d) => d.isFile())
-  .map((d) => d.name);
-if (shots.length < 3 || shots.length > 4) {
-  throw new Error(
-    `screenshots/ must hold 3 or 4 files, found ${shots.length}` +
-      ' — the first by name is the cover',
-  );
-}
 
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
@@ -62,11 +37,4 @@ writeFileSync(
     app_max_bytes: 50331648,
     app_path_max_bytes: 1000,
   }),
-);
-
-const appFiles = readAppTree(join(here, 'app')).files.length;
-
-console.log(
-  `Hand-in ready at ${out}: app/ (${appFiles} files) + ${shots.length} screenshots ` +
-    `(${shots.join(', ')}) + dossier.json`,
 );
