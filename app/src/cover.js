@@ -1,43 +1,54 @@
-// cover.js — the cover art engine.
+// cover.js — the poster rendering engine.
 //
-// Turns a set of photos, one per sliced panel, plus a caption, into a GTA-style
-// poster: diagonal sliced panels (each panel its own crop/zoom/offset), a warm
-// sunset grade, palm silhouettes, a retro sun, halftone + grain print texture
-// and a bold condensed caption. Everything is drawn with the 2D canvas API, no
-// libraries, no network. `renderCover` draws onto any canvas at the canvas's own
-// size, so the same state renders the live preview and the 1080/1350/1920 exports.
+// Composes a GTA-style cover from a list of photos (one per diagonal panel)
+// plus a caption. Each panel keeps its own crop / zoom / offset, the whole
+// thing sits under a warm sunset grade with palm silhouettes and a retro sun,
+// then a halftone + film-grain print texture, a subtle vignette and a bold
+// condensed caption. Everything is 2D canvas — no libraries, no network.
+// `renderCover` paints onto whatever canvas it is handed, at that canvas's own
+// pixel size, so the live preview and the 1080 / 1350 / 1920 exports share a
+// single code path.
 
 export const PANEL_MIN = 3;
 export const PANEL_MAX = 5;
 
-// The sunset palette, top to bottom (sky -> horizon). Kept as one array so the
-// grade can be tuned in a single place. The magenta is kept on the rose side of
-// the spectrum (rather than a hot pink) so the grade warms without turning the
-// panels red.
-const SKY = '#2a0e3f';
-const MAGENTA = '#e0527d';
-const ORANGE = '#ff8c42';
-const GOLD = '#ffd166';
+// The sunset palette, sky -> horizon, kept in one place so the grade can be
+// tuned without hunting through the file. The magenta stays on the rose side
+// of the spectrum (never a hot pink) so the grade warms rather than reddens.
+const PALETTE = {
+  sky: '#2a0e3f',
+  magenta: '#e0527d',
+  orange: '#ff8c42',
+  gold: '#ffd166',
+};
 
-// How much of the canvas width the diagonal slices lean across, in a fraction.
+// How far the diagonal slices lean across the canvas, as a fraction of width.
 const SLANT = 0.16;
+
+// ---------------------------------------------------------------------------
+// Small utilities
+// ---------------------------------------------------------------------------
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-// A tiny deterministic PRNG so the film grain (and therefore the exported
-// poster) is reproducible for the same inputs, run after run.
+// A tiny deterministic PRNG (splitmix-style) so the film grain — and therefore
+// the exported poster — is byte-stable for the same inputs across runs.
 let grainSeed = 0x9e3779b9;
-const rnd = () => {
+const nextRand = () => {
   grainSeed = (grainSeed * 1664525 + 1013904223) >>> 0;
   return grainSeed / 0xffffffff;
 };
 
+// ---------------------------------------------------------------------------
+// Panel geometry
+// ---------------------------------------------------------------------------
+
 /**
  * The N diagonal strips that tile the canvas. Each is a parallelogram; adjacent
- * strips share an edge, and their union is exactly the canvas, so nothing is
- * drawn twice and no seam shows. Panel i spans boundary lines i and i+1, where
- * boundary i runs from (i*(w+s)/n - s, 0) to (i*(w+s)/n, h) with s = SLANT*w.
- * Returned as [ [x,y], [x,y], [x,y], [x,y] ] in clockwise order.
+ * strips share an edge and their union is exactly the canvas, so nothing is
+ * drawn twice and no seam ever shows. Panel i spans boundary lines i and i+1,
+ * where boundary i runs from (i*(w+s)/n - s, 0) to (i*(w+s)/n, h) with
+ * s = SLANT * w. Returned as [[x,y],[x,y],[x,y],[x,y]] in clockwise order.
  */
 export function panelLayout(w, h, n) {
   const s = w * SLANT;
@@ -58,7 +69,7 @@ export function panelLayout(w, h, n) {
   return polys;
 }
 
-/** Which panel index (0..n-1) the point (x, y) falls in, or -1 when off-canvas. */
+/** Which panel index (0..n-1) contains the point (x, y); -1 when off-canvas. */
 export function panelAt(x, y, w, h, n) {
   if (x < 0 || x > w || y < 0 || y > h) return -1;
   if (!Number.isFinite(n) || n < 1) return -1;
@@ -68,119 +79,128 @@ export function panelAt(x, y, w, h, n) {
   return clamp(Math.floor(i), 0, n - 1);
 }
 
+// ---------------------------------------------------------------------------
+// Panels
+// ---------------------------------------------------------------------------
+
 /**
- * Clips to a panel's parallelogram and draws `img` cover-fit inside it, scaled
+ * Clip to a panel's parallelogram and draw `img` cover-fit inside it, scaled
  * by zoom (>= 1) and panned by ox/oy (each in [-1, 1], a fraction of the
- * overflow in that axis). A null image falls back to a sunset placeholder.
+ * overflow along that axis). A missing/unloaded image falls back to a sunset
+ * placeholder so a fresh poster never shows an empty strip.
  */
 function drawPanelPhoto(ctx, img, poly, zoom, ox, oy) {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
+
   ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(poly[0][0], poly[0][1]);
-  for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k][0], poly[k][1]);
-  ctx.closePath();
+  beginPolygonPath(ctx, poly);
   ctx.clip();
+
   if (img && img.naturalWidth > 0) {
-    const z = Math.max(1, zoom);
+    const z = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
     const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight) * z;
     const iw = img.naturalWidth * scale;
     const ih = img.naturalHeight * scale;
-    const oxf = clamp(ox, -1, 1);
-    const oyf = clamp(oy, -1, 1);
+    const oxf = clamp(Number.isFinite(ox) ? ox : 0, -1, 1);
+    const oyf = clamp(Number.isFinite(oy) ? oy : 0, -1, 1);
     const dx = (w - iw) / 2 + (oxf * (iw - w)) / 2;
     const dy = (h - ih) / 2 + (oyf * (ih - h)) / 2;
     ctx.drawImage(img, dx, dy, iw, ih);
   } else {
-    placeholder(ctx, w, h);
+    drawPlaceholder(ctx, w, h);
   }
+
   ctx.restore();
 }
 
-/** A warm gradient stand-in for panels with no photo yet. */
-function placeholder(ctx, w, h) {
+/** Start a path that traces the polygon, ready for clip() or fill(). */
+function beginPolygonPath(ctx, poly) {
+  ctx.beginPath();
+  ctx.moveTo(poly[0][0], poly[0][1]);
+  for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k][0], poly[k][1]);
+  ctx.closePath();
+}
+
+/** A warm gradient stand-in for panels that have no photo yet. */
+function drawPlaceholder(ctx, w, h) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, SKY);
-  g.addColorStop(0.6, MAGENTA);
-  g.addColorStop(1, ORANGE);
+  g.addColorStop(0, PALETTE.sky);
+  g.addColorStop(0.6, PALETTE.magenta);
+  g.addColorStop(1, PALETTE.orange);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 }
 
-/**
- * The warm sunset grade for one panel, clipped to its strip. A magenta/orange
- * wash in 'overlay' keeps the photo's detail while shifting its tone. The
- * overlay alpha is deliberately modest and the per-panel hue offset small, so
- * neighbouring strips read as one balanced sunset rather than a row of
- * differently-tinted frames.
- */
-function gradePanel(ctx, w, h, poly, i, n, warmth) {
-  const k = clamp(warmth, 0, 100) / 100;
-  if (k <= 0) return;
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(poly[0][0], poly[0][1]);
-  for (let q = 1; q < poly.length; q++) ctx.lineTo(poly[q][0], poly[q][1]);
-  ctx.closePath();
-  ctx.clip();
+// ---------------------------------------------------------------------------
+// Grade
+// ---------------------------------------------------------------------------
 
-  // A small variance so neighbouring panels are not all tinted identically.
-  const hue = n <= 1 ? 0 : (i / (n - 1) - 0.5) * 0.06;
-  const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, shift(SKY, hue));
-  g.addColorStop(0.5, shift(MAGENTA, hue));
-  g.addColorStop(0.82, shift(ORANGE, hue));
-  g.addColorStop(1, shift(GOLD, hue));
+/**
+ * The warm sunset grade, applied ONCE across the whole composition rather than
+ * per strip. A single pass means every panel receives the identical wash, so
+ * the tint stays balanced left to right (earlier builds tinted each panel
+ * separately, which let the right-hand strips drift oversaturated). A magenta
+ * -> orange -> gold wash in 'overlay' keeps each photo's detail while shifting
+ * its tone, followed by a plum 'multiply' at the base to anchor the ground.
+ */
+function applyGrade(ctx, w, h, warmth) {
+  const strength = clamp(Number.isFinite(warmth) ? warmth : 0, 0, 100) / 100;
+  if (strength <= 0) return;
+
+  ctx.save();
+
+  const wash = ctx.createLinearGradient(0, 0, 0, h);
+  wash.addColorStop(0, PALETTE.sky);
+  wash.addColorStop(0.5, PALETTE.magenta);
+  wash.addColorStop(0.82, PALETTE.orange);
+  wash.addColorStop(1, PALETTE.gold);
   ctx.globalCompositeOperation = 'overlay';
-  ctx.globalAlpha = 0.30 + 0.22 * k;
-  ctx.fillStyle = g;
+  ctx.globalAlpha = 0.28 + 0.18 * strength;
+  ctx.fillStyle = wash;
   ctx.fillRect(0, 0, w, h);
 
-  // A deeper plum multiply along the bottom, so the strips anchor to the ground.
   const shade = ctx.createLinearGradient(0, h * 0.55, 0, h);
   shade.addColorStop(0, 'rgba(26, 10, 31, 0)');
   shade.addColorStop(1, 'rgba(26, 10, 31, 0.55)');
   ctx.globalCompositeOperation = 'multiply';
-  ctx.globalAlpha = 0.4 + 0.2 * k;
+  ctx.globalAlpha = 0.34 + 0.16 * strength;
   ctx.fillStyle = shade;
   ctx.fillRect(0, 0, w, h);
 
   ctx.restore();
 }
 
-/** Shift a #rrggbb color's hue by a small amount toward its neighbours. */
-function shift(hex, t) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  // A cheap warm/cool lean: push red up and blue down as t rises.
-  const nr = clamp(Math.round(r + t * 40), 0, 255);
-  const nb = clamp(Math.round(b - t * 40), 0, 255);
-  return `rgb(${nr}, ${g}, ${nb})`;
-}
+// ---------------------------------------------------------------------------
+// Decor: sun, palms, texture
+// ---------------------------------------------------------------------------
 
 /** A retro sun with horizontal slits, drawn as a soft bloom over the panels. */
 function drawSun(ctx, w, h) {
   const cx = w * 0.74;
   const cy = h * 0.30;
   const r = Math.min(w, h) * 0.16;
-  const g = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 1.6);
-  g.addColorStop(0, 'rgba(255, 210, 120, 0.55)');
-  g.addColorStop(1, 'rgba(255, 210, 120, 0)');
-  ctx.fillStyle = g;
+
+  // Soft outer bloom, faint enough that it lights the right side without
+  // flattening the photos underneath.
+  const bloom = ctx.createRadialGradient(cx, cy, r * 0.1, cx, cy, r * 1.6);
+  bloom.addColorStop(0, 'rgba(255, 210, 120, 0.5)');
+  bloom.addColorStop(1, 'rgba(255, 210, 120, 0)');
+  ctx.fillStyle = bloom;
   ctx.fillRect(0, 0, w, h);
 
   ctx.save();
   ctx.beginPath();
   ctx.arc(cx, cy, r, 0, Math.PI * 2);
   ctx.clip();
+
   const body = ctx.createLinearGradient(0, cy - r, 0, cy + r);
   body.addColorStop(0, '#ffe2a8');
   body.addColorStop(1, '#ff9e4a');
   ctx.fillStyle = body;
   ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
-  // Horizontal slits (negative space) for the retro look.
+
+  // Horizontal slits — negative space for the retro look.
   ctx.fillStyle = 'rgba(42, 14, 63, 0.9)';
   for (let i = 0; i < 4; i++) {
     const y = cy + (i - 1.5) * (r * 0.32);
@@ -193,100 +213,121 @@ function drawSun(ctx, w, h) {
 /** A palm silhouette, drawn from curves so it stays original and vector-crisp. */
 function drawPalm(ctx, x, baseY, h, lean) {
   const topY = baseY - h;
+  const crownX = x + lean;
+  const crownY = topY + h * 0.05;
+
   ctx.save();
   ctx.strokeStyle = '#16081d';
   ctx.fillStyle = '#16081d';
   ctx.lineCap = 'round';
+
   // Trunk: a gently curved taper.
   ctx.beginPath();
   ctx.moveTo(x, baseY);
-  const midX = x + lean * 0.4;
-  ctx.quadraticCurveTo(midX, baseY - h * 0.55, x + lean, topY + h * 0.06);
+  ctx.quadraticCurveTo(x + lean * 0.4, baseY - h * 0.55, crownX, topY + h * 0.06);
   ctx.lineWidth = h * 0.09;
   ctx.stroke();
-  // Fronds fan upward and outward from the crown, centered on the top.
-  const crownX = x + lean;
-  const crownY = topY + h * 0.05;
+
+  // Fronds fan upward and outward from the crown.
   const fronds = 7;
   for (let i = 0; i < fronds; i++) {
     const a = Math.PI * 1.05 + (i / (fronds - 1)) * Math.PI * 0.9;
     const len = h * 0.34;
     const tipX = crownX + Math.cos(a) * len;
     const tipY = crownY + Math.sin(a) * len;
+
     ctx.beginPath();
     ctx.moveTo(crownX, crownY);
-    const cxm = crownX + Math.cos(a + 0.25) * len * 0.5;
-    const cym = crownY + Math.sin(a + 0.25) * len * 0.5;
-    ctx.quadraticCurveTo(cxm, cym, tipX, tipY);
-    const cxm2 = crownX + Math.cos(a - 0.25) * len * 0.5;
-    const cym2 = crownY + Math.sin(a - 0.25) * len * 0.5;
-    ctx.quadraticCurveTo(cxm2, cym2, crownX, crownY);
+    ctx.quadraticCurveTo(
+      crownX + Math.cos(a + 0.25) * len * 0.5,
+      crownY + Math.sin(a + 0.25) * len * 0.5,
+      tipX,
+      tipY,
+    );
+    ctx.quadraticCurveTo(
+      crownX + Math.cos(a - 0.25) * len * 0.5,
+      crownY + Math.sin(a - 0.25) * len * 0.5,
+      crownX,
+      crownY,
+    );
     ctx.closePath();
     ctx.fill();
   }
+
   ctx.restore();
 }
 
+/** Build (once) and tile a small canvas as a repeating pattern. */
+function tilePattern(ctx, size, painter) {
+  const tile = document.createElement('canvas');
+  tile.width = tile.height = size;
+  painter(tile.getContext('2d'), size);
+  return ctx.createPattern(tile, 'repeat');
+}
+
+let halftonePattern = null;
 /** Halftone dot grid, printed in 'overlay' for a poster-press texture. */
-let halftoneCache = null;
-function halftone(ctx, w, h) {
-  const cell = 6;
-  if (!halftoneCache) {
-    const c = document.createElement('canvas');
-    c.width = c.height = cell;
-    const d = c.getContext('2d');
-    d.fillStyle = 'rgba(255,255,255,0.5)';
-    d.beginPath();
-    d.arc(cell / 2, cell / 2, cell * 0.16, 0, Math.PI * 2);
-    d.fill();
-    halftoneCache = ctx.createPattern(c, 'repeat');
+function drawHalftone(ctx, w, h) {
+  if (!halftonePattern) {
+    halftonePattern = tilePattern(ctx, 6, (d, cell) => {
+      d.fillStyle = 'rgba(255,255,255,0.5)';
+      d.beginPath();
+      d.arc(cell / 2, cell / 2, cell * 0.16, 0, Math.PI * 2);
+      d.fill();
+    });
   }
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
   ctx.globalAlpha = 0.10;
-  ctx.fillStyle = halftoneCache;
+  ctx.fillStyle = halftonePattern;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();
 }
 
-/** Film grain from a small noise tile, tiled and blended lightly. */
-let grainCache = null;
-function grain(ctx, w, h) {
-  const cell = 128;
-  if (!grainCache) {
-    const c = document.createElement('canvas');
-    c.width = c.height = cell;
-    const d = c.getContext('2d');
-    const id = d.createImageData(cell, cell);
-    for (let i = 0; i < id.data.length; i += 4) {
-      const v = 110 + Math.floor(rnd() * 90);
-      id.data[i] = v;
-      id.data[i + 1] = v;
-      id.data[i + 2] = v;
-      id.data[i + 3] = 18;
-    }
-    d.putImageData(id, 0, 0);
-    grainCache = ctx.createPattern(c, 'repeat');
+let grainPattern = null;
+/** Film grain from a noise tile, tiled and blended lightly. */
+function drawGrain(ctx, w, h) {
+  if (!grainPattern) {
+    grainPattern = tilePattern(ctx, 128, (d, cell) => {
+      const id = d.createImageData(cell, cell);
+      for (let i = 0; i < id.data.length; i += 4) {
+        const v = 110 + Math.floor(nextRand() * 90);
+        id.data[i] = v;
+        id.data[i + 1] = v;
+        id.data[i + 2] = v;
+        id.data[i + 3] = 18;
+      }
+      d.putImageData(id, 0, 0);
+    });
   }
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
   ctx.globalAlpha = 0.55;
-  ctx.fillStyle = grainCache;
+  ctx.fillStyle = grainPattern;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();
 }
 
-/** A soft vignette plus a print border, drawn over everything but the caption. */
-function frame(ctx, w, h) {
-  const v = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.75);
+// ---------------------------------------------------------------------------
+// Vignette + border
+// ---------------------------------------------------------------------------
+
+/** A subtle vignette darkening the corners, drawn over the art. */
+function drawVignette(ctx, w, h) {
+  const inner = Math.min(w, h) * 0.4;
+  const outer = Math.max(w, h) * 0.75;
+  const v = ctx.createRadialGradient(w / 2, h / 2, inner, w / 2, h / 2, outer);
   v.addColorStop(0, 'rgba(10, 4, 16, 0)');
-  v.addColorStop(1, 'rgba(10, 4, 16, 0.5)');
+  v.addColorStop(1, 'rgba(10, 4, 16, 0.42)');
   ctx.save();
   ctx.globalCompositeOperation = 'multiply';
   ctx.fillStyle = v;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();
+}
 
+/** A double cream print border framing the poster. */
+function drawBorder(ctx, w, h) {
   const bw = Math.max(2, Math.min(w, h) * 0.012);
   ctx.save();
   ctx.strokeStyle = 'rgba(255, 244, 214, 0.85)';
@@ -298,9 +339,13 @@ function frame(ctx, w, h) {
   ctx.restore();
 }
 
+// ---------------------------------------------------------------------------
+// Caption
+// ---------------------------------------------------------------------------
+
 /**
- * Lays out the main caption as a single line, or two stacked lines when a
- * single line would have to shrink below a readable size. Returns
+ * Lays out the main caption as one line, or two stacked lines when a single
+ * line would have to shrink below a readable size. Returns
  * { lines: string[], size } where `size` is the largest font that fits.
  */
 function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
@@ -314,6 +359,7 @@ function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
 
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 2) return { lines: [text], size };
+
   // Largest size at which some word split keeps both lines within maxW.
   for (let s = startSize; s >= minSize; s--) {
     ctx.font = `${s}px ${face}`;
@@ -325,6 +371,7 @@ function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
       }
     }
   }
+
   // Absolute fallback: a balanced split at the minimum size.
   const mid = Math.ceil(words.length / 2);
   return {
@@ -333,24 +380,37 @@ function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
   };
 }
 
+/** Shrink a font size until `text` fits within `maxW`; returns the fitted size. */
+function fitText(ctx, text, startSize, maxW, face) {
+  let size = startSize;
+  ctx.font = `${size}px ${face}`;
+  while (ctx.measureText(text).width > maxW && size > 6) {
+    size -= 1;
+    ctx.font = `${size}px ${face}`;
+  }
+  return size;
+}
+
 /** The bold caption (and an optional smaller line) along the foot of the poster. */
 function drawCaption(ctx, w, h, caption, sub) {
   const main = (caption || '').trim().toUpperCase();
   const subText = (sub || '').trim().toUpperCase();
   if (!main && !subText) return;
+
   const face = '"Anton", "Arial Narrow", sans-serif';
   const baseline = h * 0.88;
-
   let mainBlockHeight = 0;
+
   if (main) {
     const { lines, size } = layoutCaption(ctx, main, h * 0.115, w * 0.88, face);
     const lineHeight = size * 1.06;
     mainBlockHeight = lines.length * lineHeight;
+
     ctx.save();
     ctx.font = `${size}px ${face}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
-    // Hard drop shadow, then an outline, then a cream->gold fill.
+    // Hard drop shadow, then an outline, then a cream -> gold fill.
     ctx.shadowColor = 'rgba(0, 0, 0, 0.65)';
     ctx.shadowBlur = size * 0.12;
     ctx.shadowOffsetY = size * 0.08;
@@ -361,6 +421,7 @@ function drawCaption(ctx, w, h, caption, sub) {
     fill.addColorStop(0, '#fff6e0');
     fill.addColorStop(1, '#ffd166');
     ctx.fillStyle = fill;
+
     lines.forEach((line, li) => {
       const y = baseline - (lines.length - 1 - li) * lineHeight;
       ctx.strokeText(line, w / 2, y);
@@ -371,7 +432,7 @@ function drawCaption(ctx, w, h, caption, sub) {
 
   if (subText) {
     const size = fitText(ctx, subText, h * 0.052, w * 0.8, face);
-    // Sit just above the caption block's top when one is present, so the two
+    // Sit just above the caption block when one is present, so the two lines
     // never overlap no matter how long the caption is.
     const subBaseline = baseline - mainBlockHeight - size * 0.55;
     ctx.save();
@@ -386,16 +447,9 @@ function drawCaption(ctx, w, h, caption, sub) {
   }
 }
 
-/** Shrink a font size until `text` fits within `maxW`. Returns the fitted size. */
-function fitText(ctx, text, startSize, maxW, face) {
-  let size = startSize;
-  ctx.font = `${size}px ${face}`;
-  while (ctx.measureText(text).width > maxW && size > 6) {
-    size -= 1;
-    ctx.font = `${size}px ${face}`;
-  }
-  return size;
-}
+// ---------------------------------------------------------------------------
+// Entry point
+// ---------------------------------------------------------------------------
 
 /**
  * Renders the whole poster onto `canvas` at its own pixel size.
@@ -409,6 +463,7 @@ export function renderCover(canvas, state) {
   const w = canvas.width;
   const h = canvas.height;
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
+
   const panels = Array.isArray(state.panels) ? state.panels : [];
   const n = clamp(panels.length, PANEL_MIN, PANEL_MAX);
   const polys = panelLayout(w, h, n);
@@ -417,17 +472,18 @@ export function renderCover(canvas, state) {
   ctx.fillStyle = '#180b1e';
   ctx.fillRect(0, 0, w, h);
 
+  // Photos first, then a single uniform grade over the whole poster.
   for (let i = 0; i < n; i++) {
     const p = panels[i] ?? { photo: null, zoom: 1, ox: 0, oy: 0 };
     drawPanelPhoto(ctx, p.photo, polys[i], p.zoom ?? 1, p.ox ?? 0, p.oy ?? 0);
-    gradePanel(ctx, w, h, polys[i], i, n, state.warmth ?? 60);
   }
-
+  applyGrade(ctx, w, h, state.warmth ?? 60);
   drawSun(ctx, w, h);
   drawPalm(ctx, w * 0.08, h * 1.02, h * 0.5, w * 0.10);
   drawPalm(ctx, w * 0.94, h * 1.02, h * 0.42, -w * 0.08);
-  halftone(ctx, w, h);
-  grain(ctx, w, h);
-  frame(ctx, w, h);
+  drawHalftone(ctx, w, h);
+  drawGrain(ctx, w, h);
+  drawVignette(ctx, w, h);
+  drawBorder(ctx, w, h);
   drawCaption(ctx, w, h, state.caption, state.sub);
 }
