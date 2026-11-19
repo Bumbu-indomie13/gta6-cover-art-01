@@ -15,11 +15,11 @@ const LAYOUT = {
 const GRADES = {
   sunset: {
     bg: ['#2b0a4d', '#7a1a63', '#ff5e3a', '#ffc23d'],
-    tints: ['#ff7b2d', '#ff3e9a', '#ffd23e', '#ff6a3d', '#ff9d2d'],
-    glow: 'rgba(255, 94, 58, 0.30)',
+    tints: ['#ffa050', '#ff8c5f', '#ff7d6e', '#ff7180', '#ff6a8f'],
+    glow: 'rgba(255, 130, 84, 0.20)',
     top: 'rgba(88, 28, 150, 0.42)',
-    mid: 'rgba(255, 120, 60, 0.12)',
-    bottom: 'rgba(255, 40, 90, 0.50)',
+    mid: 'rgba(255, 150, 100, 0.07)',
+    bottom: 'rgba(255, 105, 115, 0.32)',
   },
   neon: {
     bg: ['#050014', '#101d52', '#009e94', '#ff2ea6'],
