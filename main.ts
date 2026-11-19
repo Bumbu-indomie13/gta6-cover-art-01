@@ -15,7 +15,7 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildDossier } from './vendor/makefun-app.ts';
+import { buildDossier, readAppTree } from './vendor/makefun-app.ts';
 
 const here = fileURLToPath(new URL('.', import.meta.url));
 const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
@@ -64,6 +64,9 @@ writeFileSync(
   }),
 );
 
+const appFiles = readAppTree(join(here, 'app')).files.length;
+
 console.log(
-  `Hand-in ready at ${out}: app/ + ${shots.length} screenshots (${shots.join(', ')}) + dossier.json`,
+  `Hand-in ready at ${out}: app/ (${appFiles} files) + ${shots.length} screenshots ` +
+    `(${shots.join(', ')}) + dossier.json`,
 );
