@@ -1,13 +1,14 @@
-// Vice Cover — a GTA-style cover-poster maker, handed in as a static web app
-// (Node 22, standard library only, no build step, no network). The app lives in
-// app/ and runs offline in a desktop browser: app/index.html plus its ES modules
-// (src/main.js, src/cover.js, src/shots.js) turn a photo and a caption into a
-// collage of 3-5 diagonal sliced panels — each panel with its own crop/zoom/
-// offset, set by dragging on the poster or with sliders — under a warm sunset
-// grade, palm silhouettes, a retro sun, halftone + grain print texture and a bold
-// Anton caption (app/assets/Anton-Regular.ttf, OFL 1.1, vendored locally). One
-// 2D-canvas engine renders the live preview and the exports: PNGs at 1080x1080,
-// 1080x1350 and 1920x1080 via canvas.toBlob, all offline, no library, no CDN.
+// Vice Cover v1.1.0 — a GTA-style cover-poster maker, handed in as a static web
+// app (Node 22, standard library only, no build step, no network). The app
+// lives in app/ and runs offline in a desktop browser: app/index.html plus its
+// ES modules (src/main.js, src/cover.js, src/shots.js) turn a photo and a
+// caption into a collage of 3-5 diagonal sliced panels — each panel with its own
+// crop/zoom/offset, set by dragging on the poster or with sliders — under a warm
+// sunset grade, palm silhouettes, a retro sun, halftone + grain print texture
+// and a bold Anton caption (app/assets/Anton-Regular.ttf, OFL 1.1, vendored
+// locally). One 2D-canvas engine renders the live preview and the exports: PNGs
+// at 1080x1080, 1080x1350 and 1920x1080 via canvas.toBlob, all offline, no
+// library, no CDN.
 //
 // This program hands the entry in: it copies app/ and screenshots/ from beside
 // this file to /output (or MAKEFUN_OUTPUT_DIR) and writes dossier.json, the
@@ -64,7 +65,7 @@ const shotNames = existsSync(join(repoRoot, 'screenshots'))
       .filter((n) => !n.startsWith('.') && IMAGE_EXT.test(n))
       .sort()
   : [];
-console.log(`Vice Cover entry written to ${outDir}`);
+console.log(`Vice Cover v1.1.0 entry written to ${outDir}`);
 console.log(`  app/          -> ${outDir}/app`);
 console.log(`  screenshots/  -> ${outDir}/screenshots (${shotNames.length} image${shotNames.length === 1 ? '' : 's'})`);
 console.log(`  dossier.json  -> ${outDir}/dossier.json (${dossier.length} bytes)`);

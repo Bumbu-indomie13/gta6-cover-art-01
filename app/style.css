@@ -1,5 +1,6 @@
-/* Vice Cover — a dark editor around the poster canvas. The cover itself is drawn
-   by ./src/cover.js; this sheet styles the sidebar controls and the stage. */
+/* Vice Cover v1.1.0 — a dark editor around the poster canvas. The cover itself
+   is drawn by ./src/cover.js; this sheet styles the sidebar controls and the
+   stage. */
 
 /* Anton, the poster's display face, ships as a file under app/assets/ (OFL 1.1). */
 @font-face {
@@ -187,6 +188,7 @@ button {
   cursor: pointer;
   color: #1d0e1c;
   background: linear-gradient(180deg, #ffb06a, #ff8c42);
+  transition: filter 0.12s ease, transform 0.12s ease;
 }
 button:hover { filter: brightness(1.06); }
 button:active { transform: translateY(1px); }

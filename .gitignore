@@ -1,14 +1,20 @@
-# Build output and the local hand-in directory (out/, outz/, ...).
+# Build output and the local hand-in directory (out/, outv/, ...).
 out*/
 
 # Dependencies (the app is dependency-free, but never commit these).
 node_modules/
 
-# OS and editor cruft.
+# Editor and IDE cruft.
+.vscode/
+.idea/
+
+# OS cruft.
 .DS_Store
 Thumbs.db
 *.log
 *.tmp
+*.swp
+*.orig
 
 # Secrets: never commit these.
 .env

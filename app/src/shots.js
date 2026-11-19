@@ -1,7 +1,8 @@
-// shots.js — fixed scenes for screenshots. `?shot=editor` shows the editor with a
-// sample photo loaded; `?shot=cover` shows a cover rendered full-bleed at the
-// viewport size. `photo`/`caption`/`sub`/`warmth`/`panels` tune the scene.
-// window.__shotReady is set once the poster is painted and the fonts are in.
+// shots.js — fixed scenes for screenshots (v1.1.0). `?shot=editor` shows the
+// editor with a sample photo loaded; `?shot=cover` shows a cover rendered
+// full-bleed at the viewport size. `photo`/`caption`/`sub`/`warmth`/`panels`
+// tune the scene. window.__shotReady is set once the poster is painted and the
+// fonts are in.
 
 import { PANEL_MIN, PANEL_MAX } from './cover.js';
 
@@ -20,7 +21,14 @@ export async function runShot(shot, query, api) {
   const panelsRaw = Number.parseInt(query.get('panels') ?? '', 10);
   const panels = clamp(Number.isFinite(panelsRaw) ? panelsRaw : 4, PANEL_MIN, PANEL_MAX);
 
-  const img = await api.loadImage(`samples/${photoName}.jpg`);
+  // A bad `photo` name must not strand the scene: fall back to the pier sample
+  // (which ships with the app) if the requested one cannot be loaded.
+  let img;
+  try {
+    img = await api.loadImage(`samples/${photoName}.jpg`);
+  } catch {
+    img = await api.loadImage('samples/pier.jpg');
+  }
 
   // Populate the shared state for this scene, one photo across every panel.
   api.state.photos = [{ img, name: photoName }];

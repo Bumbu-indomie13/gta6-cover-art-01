@@ -1,6 +1,6 @@
 // main.js — wires the editor UI to the cover engine (./cover.js). A `?shot=`
 // query hands control to ./shots.js instead, which sets up a fixed scene for a
-// screenshot.
+// screenshot capture.
 
 import { renderCover, panelAt, panelLayout, PANEL_MIN, PANEL_MAX } from './cover.js';
 import { runShot } from './shots.js';
@@ -99,7 +99,7 @@ export function loadImage(url) {
 async function addPhotoFiles(fileList) {
   for (const file of fileList) {
     if (!file.type.startsWith('image/')) continue;
-    // Blob URLs are handed back to the browser once the image has decoded.
+    // A Blob URL is handed back to the browser once the image has decoded.
     const url = URL.createObjectURL(file);
     try {
       const img = await loadImage(url);
@@ -243,7 +243,10 @@ canvas.addEventListener('pointerdown', (e) => {
   if (i >= 0) selectPanel(i);
   const p = state.panels[state.active];
   dragging = { startX: x, startY: y, startOx: p.ox, startOy: p.oy };
-  canvas.setPointerCapture(e.pointerId);
+  // Keep receiving moves even when the pointer leaves the canvas; the CSS
+  // touch-action: none already stops the gesture from scrolling the page.
+  if (canvas.setPointerCapture) canvas.setPointerCapture(e.pointerId);
+  e.preventDefault();
 });
 
 canvas.addEventListener('pointermove', (e) => {
@@ -253,10 +256,12 @@ canvas.addEventListener('pointermove', (e) => {
   // Dragging the full canvas width sweeps the whole ox range ([-1, 1]).
   p.ox = clamp(dragging.startOx + ((x - dragging.startX) / canvas.width) * 2, -1, 1);
   p.oy = clamp(dragging.startOy + ((y - dragging.startY) / canvas.height) * 2, -1, 1);
+  e.preventDefault();
   render();
 });
 
 canvas.addEventListener('pointerup', () => { dragging = null; });
+canvas.addEventListener('pointercancel', () => { dragging = null; });
 
 // ---------------------------------------------------------------------------
 // Export
@@ -278,6 +283,7 @@ function exportCover(w, h) {
     a.download = name;
     a.click();
     els.status.textContent = `Saved ${name} (${Math.round(blob.size / 1024)} KB)`;
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   }, 'image/png');
 }
 

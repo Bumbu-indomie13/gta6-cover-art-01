@@ -1,24 +1,26 @@
-// cover.js — the poster rendering engine.
+// cover.js — the poster renderer for Vice Cover.
 //
-// Composes a GTA-style cover from a list of photos (one per diagonal panel)
-// plus a caption. Each panel keeps its own crop / zoom / offset, the whole
-// thing sits under a warm sunset grade with palm silhouettes and a retro sun,
-// then a halftone + film-grain print texture, a subtle vignette and a bold
-// condensed caption. Everything is 2D canvas — no libraries, no network.
-// `renderCover` paints onto whatever canvas it is handed, at that canvas's own
-// pixel size, so the live preview and the 1080 / 1350 / 1920 exports share a
-// single code path.
+// Turns a list of photos (one per diagonal panel) plus a caption into a
+// GTA-style cover poster. Every panel carries its own crop / zoom / offset;
+// the whole canvas sits under a single warm sunset grade with palm silhouettes
+// and a retro slitted sun, then halftone + film-grain print texture, a soft
+// vignette, a double print border and a bold condensed caption. Pure 2D canvas
+// — no libraries, no network, fully offline.
+//
+// renderCover paints onto whichever canvas it is handed, at that canvas's own
+// pixel size, so the live preview and the 1080 / 1350 / 1920 PNG exports all
+// flow through this one code path and stay composition-identical.
 
 export const PANEL_MIN = 3;
 export const PANEL_MAX = 5;
 
-// The caption and its optional sub-line render in Anton, shipped as a local
-// file under app/assets/; the fallbacks keep the text readable until it loads.
+// The caption face: Anton, shipped locally under app/assets/ (OFL 1.1). The
+// fallbacks keep text readable until the webfont has decoded.
 const CAPTION_FACE = '"Anton", "Arial Narrow", sans-serif';
 
-// The sunset palette, sky -> horizon, kept in one place so the grade can be
-// tuned without hunting through the file. The magenta stays on the rose side
-// of the spectrum (never a hot pink) so the grade warms rather than reddens.
+// Sunset palette, sky -> horizon. Keeping these in one place means the grade
+// can be retuned without hunting through the file. The magenta stays on the
+// rose side (never a hot pink) so the wash warms the art instead of reddening it.
 const PALETTE = {
   sky: '#2a0e3f',
   magenta: '#e0527d',
@@ -26,15 +28,15 @@ const PALETTE = {
   gold: '#ffd166',
 };
 
-// How far the diagonal slices lean across the canvas, as a fraction of width.
+// How far the diagonal slices lean, as a fraction of the canvas width.
 const SLANT = 0.16;
 
-// The grade strength used when the caller hands none, named so the default sits
-// beside the code that consumes it rather than as a bare number at the call.
+// The grade strength used when the caller hands none. Named so the default
+// lives beside the code that reads it, not as a bare number at the call site.
 const DEFAULT_WARMTH = 60;
 
-// Composition anchors, as fractions of the canvas, so the layout can be
-// retuned from one place (mirroring PALETTE and SLANT above).
+// Composition anchors, as fractions of the canvas, so the layout is retunable
+// from one place (mirroring PALETTE and SLANT above).
 const SUN_X = 0.74;
 const SUN_Y = 0.3;
 const CAPTION_BASELINE = 0.88;
@@ -51,7 +53,7 @@ const PALMS = [
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
 // A tiny deterministic PRNG (splitmix-style) so the film grain — and therefore
-// the exported poster — is byte-stable for the same inputs across runs.
+// the exported poster — is byte-stable for identical inputs across runs.
 let grainSeed = 0x9e3779b9;
 const rand01 = () => {
   grainSeed = (grainSeed * 1664525 + 1013904223) >>> 0;
@@ -63,11 +65,11 @@ const rand01 = () => {
 // ---------------------------------------------------------------------------
 
 /**
- * The N diagonal strips that tile the canvas. Each is a parallelogram; adjacent
- * strips share an edge and their union is exactly the canvas, so nothing is
- * drawn twice and no seam ever shows. Panel i spans boundary lines i and i+1,
- * where boundary i runs from (i*(w+s)/n - s, 0) to (i*(w+s)/n, h) with
- * s = SLANT * w. Returned as [[x,y],[x,y],[x,y],[x,y]] in clockwise order.
+ * The N diagonal strips that tile the canvas. Adjacent strips share an edge and
+ * their union is exactly the canvas, so nothing is drawn twice and no seam can
+ * show. Panel i spans boundary lines i and i+1, where boundary i runs from
+ * (i*(w+s)/n - s, 0) down to (i*(w+s)/n, h) with s = SLANT * w. Each polygon is
+ * returned as [[x,y], ...] in clockwise order.
  */
 export function panelLayout(w, h, n) {
   if (!Number.isFinite(n) || n < 1) return [];
@@ -89,7 +91,7 @@ export function panelLayout(w, h, n) {
   return polys;
 }
 
-/** Which panel index (0..n-1) contains the point (x, y); -1 when off-canvas. */
+/** The panel index (0..n-1) that contains (x, y); -1 when off-canvas. */
 export function panelAt(x, y, w, h, n) {
   if (x < 0 || x > w || y < 0 || y > h) return -1;
   if (!Number.isFinite(n) || n < 1) return -1;
@@ -106,8 +108,8 @@ export function panelAt(x, y, w, h, n) {
 /**
  * Clip to a panel's parallelogram and draw `img` cover-fit inside it, scaled
  * by zoom (>= 1) and panned by ox/oy (each in [-1, 1], a fraction of the
- * overflow along that axis). A missing/unloaded image falls back to a sunset
- * placeholder so a fresh poster never shows an empty strip.
+ * overflow along that axis). A missing or not-yet-decoded image falls back to a
+ * sunset placeholder so a fresh poster never shows an empty strip.
  */
 function drawPanelPhoto(ctx, img, poly, zoom, ox, oy) {
   const w = ctx.canvas.width;
@@ -124,8 +126,15 @@ function drawPanelPhoto(ctx, img, poly, zoom, ox, oy) {
     const ih = img.naturalHeight * scale;
     const oxf = clamp(Number.isFinite(ox) ? ox : 0, -1, 1);
     const oyf = clamp(Number.isFinite(oy) ? oy : 0, -1, 1);
+    // Centre the cover-fit image, then shift by the pan fraction of the
+    // overflow along each axis (the difference between the drawn and canvas
+    // sizes — zero when the image fills the canvas exactly).
     const dx = (w - iw) / 2 + (oxf * (iw - w)) / 2;
     const dy = (h - ih) / 2 + (oyf * (ih - h)) / 2;
+    // High-quality smoothing keeps the 1920-wide export crisp when the source
+    // photo is upscaled by zoom; the preview benefits from the same setting.
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, dx, dy, iw, ih);
   } else {
     drawPlaceholder(ctx, w, h);
@@ -162,7 +171,7 @@ function drawPlaceholder(ctx, w, h) {
  * the tint stays balanced left to right (earlier builds tinted each panel
  * separately, which let the right-hand strips drift oversaturated). A magenta
  * -> orange -> gold wash in 'overlay' keeps each photo's detail while shifting
- * its tone, followed by a plum 'multiply' at the base to anchor the ground.
+ * its tone, then a plum 'multiply' at the base anchors the ground.
  */
 function applyGrade(ctx, w, h, warmth) {
   const strength = clamp(Number.isFinite(warmth) ? warmth : 0, 0, 100) / 100;
@@ -380,16 +389,24 @@ function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 2) return { lines: [text], size };
 
-  // Largest size at which some word split keeps both lines within maxW.
+  // Largest size at which some word split keeps both lines within maxW. Among
+  // the splits that fit at a size, prefer the most balanced one (closest line
+  // widths) so a wrapped title reads as a centred block instead of a long first
+  // line with a short tail.
   for (let s = startSize; s >= minSize; s--) {
     ctx.font = `${s}px ${face}`;
-    for (let split = words.length - 1; split >= 1; split--) {
+    let best = null;
+    for (let split = 1; split < words.length; split++) {
       const a = words.slice(0, split).join(' ');
       const b = words.slice(split).join(' ');
-      if (ctx.measureText(a).width <= maxW && ctx.measureText(b).width <= maxW) {
-        return { lines: [a, b], size: s };
+      const wa = ctx.measureText(a).width;
+      const wb = ctx.measureText(b).width;
+      if (wa <= maxW && wb <= maxW) {
+        const balance = Math.abs(wa - wb);
+        if (best === null || balance < best.balance) best = { a, b, balance };
       }
     }
+    if (best) return { lines: [best.a, best.b], size: s };
   }
 
   // Absolute fallback: a balanced split at the minimum size.

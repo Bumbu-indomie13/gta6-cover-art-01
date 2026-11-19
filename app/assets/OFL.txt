@@ -1,3 +1,6 @@
+Anton Regular (https://github.com/googlefonts/AntonFont.git) is vendored,
+unmodified, for Vice Cover at app/assets/Anton-Regular.ttf under this license.
+
 Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.

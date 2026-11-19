@@ -4,6 +4,10 @@
 
 Built for the make.fun bounty [gta6-cover-art-01](https://make.fun/bounty/gta6-cover-art-01).
 
+Current version: **v1.1.0** — polish pass: balanced two-line caption splits,
+sharper export upscaling, smoother button feedback, and a clearer subtitle
+label. Fully offline, no build step.
+
 # Vice Cover
 
 A GTA-style cover-poster maker that runs entirely offline in the browser. Drop in
