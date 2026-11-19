@@ -22,36 +22,49 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-const here = fileURLToPath(new URL('.', import.meta.url));
-const out = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const repoRoot = fileURLToPath(new URL('.', import.meta.url));
+const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-if (!existsSync(join(here, 'app', 'index.html'))) {
+if (!existsSync(join(repoRoot, 'app', 'index.html'))) {
   console.error('app/index.html is missing: the entry needs its offline web app.');
   process.exit(1);
 }
 
-mkdirSync(out, { recursive: true });
-cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
-mkdirSync(join(out, 'screenshots'), { recursive: true });
-if (existsSync(join(here, 'screenshots'))) cpSync(join(here, 'screenshots'), join(out, 'screenshots'), { recursive: true });
+mkdirSync(outDir, { recursive: true });
+cpSync(join(repoRoot, 'app'), join(outDir, 'app'), { recursive: true });
+mkdirSync(join(outDir, 'screenshots'), { recursive: true });
+if (existsSync(join(repoRoot, 'screenshots'))) {
+  cpSync(join(repoRoot, 'screenshots'), join(outDir, 'screenshots'), { recursive: true });
+}
 
 // The scorer's own caps (reference/gate.json): only text_max_bytes shapes the
 // bytes; the others refuse an entry the scorer would refuse (more than 4
 // screenshots or one over 256 KiB; more than 993 files in app/ or 48 MiB of app
 // files, in all, or a path under app/ over 1000 bytes).
-const dossier = buildDossier(out, {
-  text_max_bytes: 163840,
-  screenshots: { max: 4, max_bytes: 262144 },
-  app_max_files: 993,
-  app_max_bytes: 50331648,
-  app_path_max_bytes: 1000,
-});
-writeFileSync(join(out, 'dossier.json'), dossier);
+const dossier: Uint8Array = ((): Uint8Array => {
+  try {
+    return buildDossier(outDir, {
+      text_max_bytes: 163840,
+      screenshots: { max: 4, max_bytes: 262144 },
+      app_max_files: 993,
+      app_max_bytes: 50331648,
+      app_path_max_bytes: 1000,
+    });
+  } catch (err) {
+    console.error(`dossier: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+    throw err; // unreachable: process.exit does not return
+  }
+})();
+writeFileSync(join(outDir, 'dossier.json'), dossier);
 
-const shots = existsSync(join(here, 'screenshots'))
-  ? readdirSync(join(here, 'screenshots')).filter((n) => !n.startsWith('.')).sort()
+const IMAGE_EXT = /\.(?:jpe?g|png)$/i;
+const shotNames = existsSync(join(repoRoot, 'screenshots'))
+  ? readdirSync(join(repoRoot, 'screenshots'))
+      .filter((n) => !n.startsWith('.') && IMAGE_EXT.test(n))
+      .sort()
   : [];
-console.log(`Vice Cover entry written to ${out}`);
-console.log(`  app/          -> ${out}/app`);
-console.log(`  screenshots/  -> ${out}/screenshots (${shots.length} image${shots.length === 1 ? '' : 's'})`);
-console.log(`  dossier.json  -> ${out}/dossier.json (${dossier.length} bytes)`);
+console.log(`Vice Cover entry written to ${outDir}`);
+console.log(`  app/          -> ${outDir}/app`);
+console.log(`  screenshots/  -> ${outDir}/screenshots (${shotNames.length} image${shotNames.length === 1 ? '' : 's'})`);
+console.log(`  dossier.json  -> ${outDir}/dossier.json (${dossier.length} bytes)`);

@@ -32,7 +32,7 @@ PNG at 1080x1080, 1080x1350 or 1920x1080.
 ## How to run
 
 It is a static web app with no build step and no network requests, so it can be
-served any way you like. The repo ships a tiny local server (Node 22, standard
+served any way you like. The repo ships a tiny local server (Node 22+, standard
 library only):
 
     node serve.ts
@@ -52,7 +52,7 @@ vendored make.fun library.
 
 ## Layout
 
-    app/            the web app (index.html, style.css, src/*.js, assets/, samples/)
+    app/               the web app (index.html, style.css, src/*.js, assets/, samples/)
     app/src/cover.js   the 2D-canvas cover engine (renderCover, panelAt, panelLayout)
     app/src/main.js    editor wiring (drag, sliders, export, thumbnails)
     app/src/shots.js   fixed scenes for screenshots (?shot=cover / ?shot=editor)

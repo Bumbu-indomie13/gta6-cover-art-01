@@ -12,6 +12,10 @@
 export const PANEL_MIN = 3;
 export const PANEL_MAX = 5;
 
+// The caption and its optional sub-line render in Anton, shipped as a local
+// file under app/assets/; the fallbacks keep the text readable until it loads.
+const CAPTION_FACE = '"Anton", "Arial Narrow", sans-serif';
+
 // The sunset palette, sky -> horizon, kept in one place so the grade can be
 // tuned without hunting through the file. The magenta stays on the rose side
 // of the spectrum (never a hot pink) so the grade warms rather than reddens.
@@ -25,6 +29,21 @@ const PALETTE = {
 // How far the diagonal slices lean across the canvas, as a fraction of width.
 const SLANT = 0.16;
 
+// The grade strength used when the caller hands none, named so the default sits
+// beside the code that consumes it rather than as a bare number at the call.
+const DEFAULT_WARMTH = 60;
+
+// Composition anchors, as fractions of the canvas, so the layout can be
+// retuned from one place (mirroring PALETTE and SLANT above).
+const SUN_X = 0.74;
+const SUN_Y = 0.3;
+const CAPTION_BASELINE = 0.88;
+const PALM_BASE = 1.02;
+const PALMS = [
+  { x: 0.08, height: 0.5, lean: 0.1 },
+  { x: 0.94, height: 0.42, lean: -0.08 },
+];
+
 // ---------------------------------------------------------------------------
 // Small utilities
 // ---------------------------------------------------------------------------
@@ -34,7 +53,7 @@ const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 // A tiny deterministic PRNG (splitmix-style) so the film grain — and therefore
 // the exported poster — is byte-stable for the same inputs across runs.
 let grainSeed = 0x9e3779b9;
-const nextRand = () => {
+const rand01 = () => {
   grainSeed = (grainSeed * 1664525 + 1013904223) >>> 0;
   return grainSeed / 0xffffffff;
 };
@@ -51,6 +70,7 @@ const nextRand = () => {
  * s = SLANT * w. Returned as [[x,y],[x,y],[x,y],[x,y]] in clockwise order.
  */
 export function panelLayout(w, h, n) {
+  if (!Number.isFinite(n) || n < 1) return [];
   const s = w * SLANT;
   const step = (w + s) / n;
   const polys = [];
@@ -94,7 +114,7 @@ function drawPanelPhoto(ctx, img, poly, zoom, ox, oy) {
   const h = ctx.canvas.height;
 
   ctx.save();
-  beginPolygonPath(ctx, poly);
+  tracePolygon(ctx, poly);
   ctx.clip();
 
   if (img && img.naturalWidth > 0) {
@@ -115,7 +135,7 @@ function drawPanelPhoto(ctx, img, poly, zoom, ox, oy) {
 }
 
 /** Start a path that traces the polygon, ready for clip() or fill(). */
-function beginPolygonPath(ctx, poly) {
+function tracePolygon(ctx, poly) {
   ctx.beginPath();
   ctx.moveTo(poly[0][0], poly[0][1]);
   for (let k = 1; k < poly.length; k++) ctx.lineTo(poly[k][0], poly[k][1]);
@@ -177,8 +197,8 @@ function applyGrade(ctx, w, h, warmth) {
 
 /** A retro sun with horizontal slits, drawn as a soft bloom over the panels. */
 function drawSun(ctx, w, h) {
-  const cx = w * 0.74;
-  const cy = h * 0.30;
+  const cx = w * SUN_X;
+  const cy = h * SUN_Y;
   const r = Math.min(w, h) * 0.16;
 
   // Soft outer bloom, faint enough that it lights the right side without
@@ -291,7 +311,7 @@ function drawGrain(ctx, w, h) {
     grainPattern = tilePattern(ctx, 128, (d, cell) => {
       const id = d.createImageData(cell, cell);
       for (let i = 0; i < id.data.length; i += 4) {
-        const v = 110 + Math.floor(nextRand() * 90);
+        const v = 110 + Math.floor(rand01() * 90);
         id.data[i] = v;
         id.data[i + 1] = v;
         id.data[i + 2] = v;
@@ -381,7 +401,7 @@ function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
 }
 
 /** Shrink a font size until `text` fits within `maxW`; returns the fitted size. */
-function fitText(ctx, text, startSize, maxW, face) {
+function shrinkToFit(ctx, text, startSize, maxW, face) {
   let size = startSize;
   ctx.font = `${size}px ${face}`;
   while (ctx.measureText(text).width > maxW && size > 6) {
@@ -397,8 +417,8 @@ function drawCaption(ctx, w, h, caption, sub) {
   const subText = (sub || '').trim().toUpperCase();
   if (!main && !subText) return;
 
-  const face = '"Anton", "Arial Narrow", sans-serif';
-  const baseline = h * 0.88;
+  const face = CAPTION_FACE;
+  const baseline = h * CAPTION_BASELINE;
   let mainBlockHeight = 0;
 
   if (main) {
@@ -431,7 +451,7 @@ function drawCaption(ctx, w, h, caption, sub) {
   }
 
   if (subText) {
-    const size = fitText(ctx, subText, h * 0.052, w * 0.8, face);
+    const size = shrinkToFit(ctx, subText, h * 0.052, w * 0.8, face);
     // Sit just above the caption block when one is present, so the two lines
     // never overlap no matter how long the caption is.
     const subBaseline = baseline - mainBlockHeight - size * 0.55;
@@ -460,6 +480,7 @@ function drawCaption(ctx, w, h, caption, sub) {
  */
 export function renderCover(canvas, state) {
   const ctx = canvas.getContext('2d');
+  if (!ctx) return;
   const w = canvas.width;
   const h = canvas.height;
   if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return;
@@ -477,10 +498,11 @@ export function renderCover(canvas, state) {
     const p = panels[i] ?? { photo: null, zoom: 1, ox: 0, oy: 0 };
     drawPanelPhoto(ctx, p.photo, polys[i], p.zoom ?? 1, p.ox ?? 0, p.oy ?? 0);
   }
-  applyGrade(ctx, w, h, state.warmth ?? 60);
+  applyGrade(ctx, w, h, state.warmth ?? DEFAULT_WARMTH);
   drawSun(ctx, w, h);
-  drawPalm(ctx, w * 0.08, h * 1.02, h * 0.5, w * 0.10);
-  drawPalm(ctx, w * 0.94, h * 1.02, h * 0.42, -w * 0.08);
+  for (const palm of PALMS) {
+    drawPalm(ctx, w * palm.x, h * PALM_BASE, h * palm.height, w * palm.lean);
+  }
   drawHalftone(ctx, w, h);
   drawGrain(ctx, w, h);
   drawVignette(ctx, w, h);

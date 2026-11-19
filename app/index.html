@@ -3,10 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Vice Cover — an offline GTA-style poster maker: slice photos into diagonal panels and export PNG posters.">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#12070f">
 <title>Vice Cover — GTA-style poster maker</title>
 <link rel="stylesheet" href="./style.css">
 </head>
 <body>
+<noscript>
+  <p class="noscript">Vice Cover draws the poster on a canvas, so it needs JavaScript
+  enabled. Nothing else is required — the app runs fully offline.</p>
+</noscript>
 <main class="app" id="app">
   <section class="sidebar" id="sidebar">
     <header class="brand">
@@ -25,9 +32,9 @@
 
     <div class="group">
       <label for="caption">Caption</label>
-      <input id="caption" type="text" maxlength="40" value="SUNSET HEIST" autocomplete="off">
+      <input id="caption" type="text" maxlength="40" value="SUNSET HEIST" autocomplete="off" spellcheck="false">
       <label for="sub">Small line (optional)</label>
-      <input id="sub" type="text" maxlength="60" placeholder="e.g. WELCOME TO THE COAST" autocomplete="off">
+      <input id="sub" type="text" maxlength="60" placeholder="e.g. WELCOME TO THE COAST" autocomplete="off" spellcheck="false">
     </div>
 
     <div class="group">

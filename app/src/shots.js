@@ -3,23 +3,33 @@
 // viewport size. `photo`/`caption`/`sub`/`warmth`/`panels` tune the scene.
 // window.__shotReady is set once the poster is painted and the fonts are in.
 
+import { PANEL_MIN, PANEL_MAX } from './cover.js';
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
 export async function runShot(shot, query, api) {
   const photoName = query.get('photo') ?? 'pier';
   const caption = query.get('caption') ?? 'SUNSET HEIST';
   const sub = query.get('sub') ?? 'WELCOME TO THE COAST';
-  const warmth = parseInt(query.get('warmth') ?? '62', 10);
-  const panels = parseInt(query.get('panels') ?? '4', 10);
+
+  // Query values are clamped rather than trusted: a bad URL must not be able
+  // to ask for 0 panels or a NaN warmth and break the scene.
+  const warmthRaw = Number.parseInt(query.get('warmth') ?? '', 10);
+  const warmth = clamp(Number.isFinite(warmthRaw) ? warmthRaw : 62, 0, 100);
+
+  const panelsRaw = Number.parseInt(query.get('panels') ?? '', 10);
+  const panels = clamp(Number.isFinite(panelsRaw) ? panelsRaw : 4, PANEL_MIN, PANEL_MAX);
 
   const img = await api.loadImage(`samples/${photoName}.jpg`);
 
-  // Set up the state for this scene.
+  // Populate the shared state for this scene, one photo across every panel.
   api.state.photos = [{ img, name: photoName }];
   api.state.caption = caption;
   api.state.sub = sub;
   api.state.warmth = warmth;
   api.state.active = 0;
   api.setPanelCount(panels);
-  api.state.panels.forEach((p) => { p.photo = img; });
+  api.state.panels.forEach((panel) => { panel.photo = img; });
   api.render();
 
   if (shot === 'cover') {
@@ -27,10 +37,6 @@ export async function runShot(shot, query, api) {
     // Match the canvas backing store to the viewport for a crisp 1:1 capture.
     api.canvas.width = window.innerWidth;
     api.canvas.height = window.innerHeight;
-  } else {
-    // Editor scene: show the first panel selected and the controls populated.
-    api.state.caption = caption;
-    api.state.sub = sub;
   }
 
   try { await api.fontsReady(); } catch { /* fall back to system font */ }

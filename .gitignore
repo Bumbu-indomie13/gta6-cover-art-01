@@ -1,2 +1,15 @@
+# Build output and the local hand-in directory (out/, outz/, ...).
 out*/
+
+# Dependencies (the app is dependency-free, but never commit these).
 node_modules/
+
+# OS and editor cruft.
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# Secrets: never commit these.
+.env
+.env.*

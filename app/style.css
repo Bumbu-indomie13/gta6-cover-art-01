@@ -22,6 +22,8 @@
 
 * { box-sizing: border-box; }
 
+::selection { background: var(--accent-2); color: #fff; }
+
 html, body {
   margin: 0;
   height: 100%;
@@ -31,6 +33,15 @@ html, body {
     var(--bg);
   color: var(--text);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+.noscript {
+  margin: 0;
+  padding: 14px 18px;
+  background: var(--accent-2);
+  color: #fff;
+  font-weight: 600;
+  text-align: center;
 }
 
 .app {
@@ -50,6 +61,10 @@ html, body {
   flex-direction: column;
   gap: 18px;
 }
+
+.sidebar::-webkit-scrollbar { width: 10px; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
 
 .brand h1 {
   margin: 0;
@@ -87,6 +102,7 @@ input[type="text"] {
   border-radius: 8px;
   padding: 9px 10px;
 }
+input[type="text"]::placeholder { color: var(--muted); opacity: 0.75; }
 input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 
 .drop {
@@ -174,6 +190,17 @@ button {
 }
 button:hover { filter: brightness(1.06); }
 button:active { transform: translateY(1px); }
+
+button:focus-visible,
+input:focus-visible,
+.seg button:focus-visible,
+.pager button:focus-visible,
+.drop:focus-visible,
+.drop:focus-within {
+  outline: 2px solid var(--accent-2);
+  outline-offset: 2px;
+}
+
 .exports { gap: 9px; }
 .exports button:nth-child(2) { background: linear-gradient(180deg, #ff6aa0, var(--accent-2)); color: #fff; }
 .exports button:nth-child(3) { background: linear-gradient(180deg, #8f5bff, #6a3be0); color: #fff; }

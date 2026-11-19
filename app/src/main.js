@@ -57,6 +57,9 @@ const PANEL_DEFAULTS = [
   { zoom: 1.6, ox: -0.28, oy: -0.28 },
 ];
 
+// The square thumbnails in the photo picker, in CSS pixels.
+const THUMB_SIZE = 52;
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
 /** The subset of state the cover engine consumes. */
@@ -96,11 +99,15 @@ export function loadImage(url) {
 async function addPhotoFiles(fileList) {
   for (const file of fileList) {
     if (!file.type.startsWith('image/')) continue;
+    // Blob URLs are handed back to the browser once the image has decoded.
+    const url = URL.createObjectURL(file);
     try {
-      const img = await loadImage(URL.createObjectURL(file));
+      const img = await loadImage(url);
       state.photos.push({ img, name: file.name || `photo ${state.photos.length + 1}` });
     } catch {
       /* skip unreadable file */
+    } finally {
+      URL.revokeObjectURL(url);
     }
   }
   if (!state.photos.length) return;
@@ -182,18 +189,18 @@ function rebuildPhotoPick() {
 
   state.photos.forEach((entry) => {
     const thumb = document.createElement('canvas');
-    thumb.width = 52;
-    thumb.height = 52;
+    thumb.width = THUMB_SIZE;
+    thumb.height = THUMB_SIZE;
     thumb.className = 'thumb';
     thumb.title = entry.name;
     if (entry.img === activePhoto) thumb.classList.add('on');
 
-    // cover-fit thumbnail
+    // cover-fit thumbnail, sized from the decoded (natural) dimensions
     const c = thumb.getContext('2d');
-    const s = Math.max(52 / entry.img.width, 52 / entry.img.height);
-    const dw = entry.img.width * s;
-    const dh = entry.img.height * s;
-    c.drawImage(entry.img, (52 - dw) / 2, (52 - dh) / 2, dw, dh);
+    const s = Math.max(THUMB_SIZE / entry.img.naturalWidth, THUMB_SIZE / entry.img.naturalHeight);
+    const dw = entry.img.naturalWidth * s;
+    const dh = entry.img.naturalHeight * s;
+    c.drawImage(entry.img, (THUMB_SIZE - dw) / 2, (THUMB_SIZE - dh) / 2, dw, dh);
 
     thumb.addEventListener('click', () => {
       state.panels[state.active].photo = entry.img;
@@ -213,8 +220,7 @@ function applyPanel() {
 
 function selectPanel(i) {
   state.active = clamp(i, 0, state.panels.length - 1);
-  syncPanelEditor();
-  render();
+  render(); // render() syncs the panel editor as its last step
 }
 
 // ---------------------------------------------------------------------------
@@ -313,9 +319,16 @@ els.zoom.addEventListener('input', applyPanel);
 els.offsetX.addEventListener('input', applyPanel);
 els.offsetY.addEventListener('input', applyPanel);
 
-byId('export-sq').addEventListener('click', () => exportCover(1080, 1080));
-byId('export-st').addEventListener('click', () => exportCover(1080, 1350));
-byId('export-w').addEventListener('click', () => exportCover(1920, 1080));
+// Export buttons -> pixel sizes, wired from one table so adding a format is a
+// one-line change.
+const EXPORT_FORMATS = {
+  'export-sq': [1080, 1080],
+  'export-st': [1080, 1350],
+  'export-w': [1920, 1080],
+};
+for (const [id, [w, h]] of Object.entries(EXPORT_FORMATS)) {
+  byId(id).addEventListener('click', () => exportCover(w, h));
+}
 
 // ---------------------------------------------------------------------------
 // Font readiness + boot
