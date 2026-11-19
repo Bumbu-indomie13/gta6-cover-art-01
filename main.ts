@@ -12,7 +12,7 @@
 //   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
 // v1.1.0 — softened the sunset grade in app/src/cover.js (less red, orange-to-pink spread).
 
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
@@ -34,6 +34,16 @@ for (const [path, what] of [
   }
 }
 
+const shots = readdirSync(join(here, 'screenshots'), { withFileTypes: true })
+  .filter((d) => d.isFile())
+  .map((d) => d.name);
+if (shots.length < 3 || shots.length > 4) {
+  throw new Error(
+    `screenshots/ must hold 3 or 4 files, found ${shots.length}` +
+      ' — the first by name is the cover',
+  );
+}
+
 mkdirSync(out, { recursive: true });
 cpSync(join(here, 'app'), join(out, 'app'), { recursive: true });
 mkdirSync(join(out, 'screenshots'), { recursive: true });
@@ -52,4 +62,8 @@ writeFileSync(
     app_max_bytes: 50331648,
     app_path_max_bytes: 1000,
   }),
+);
+
+console.log(
+  `Hand-in ready at ${out}: app/ + ${shots.length} screenshots (${shots.join(', ')}) + dossier.json`,
 );
