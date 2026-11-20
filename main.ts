@@ -1,4 +1,4 @@
-// Vice Cover v1.1.0 — a GTA-style cover-poster maker, handed in as a static web
+// Vice Cover v1.2.0 — a GTA-style cover-poster maker, handed in as a static web
 // app (Node 22, standard library only, no build step, no network). The app
 // lives in app/ and runs offline in a desktop browser: app/index.html plus its
 // ES modules (src/main.js, src/cover.js, src/shots.js) turn a photo and a
@@ -68,7 +68,7 @@ const shotNames = existsSync(join(repoRoot, 'screenshots'))
 if (shotNames.length < 3) {
   console.warn(`  note: screenshots/ holds ${shotNames.length} image${shotNames.length === 1 ? '' : 's'}; an entry wants 3 or 4.`);
 }
-console.log(`Vice Cover v1.1.0 entry written to ${outDir}`);
+console.log(`Vice Cover v1.2.0 entry written to ${outDir}`);
 console.log(`  app/          -> ${outDir}/app`);
-console.log(`  screenshots/  -> ${outDir}/screenshots (${shotNames.length} image${shotNames.length === 1 ? '' : 's'})`);
+console.log(`  screenshots/  -> ${outDir}/screenshots (${shotNames.join(', ') || 'none'})`);
 console.log(`  dossier.json  -> ${outDir}/dossier.json (${dossier.length} bytes)`);

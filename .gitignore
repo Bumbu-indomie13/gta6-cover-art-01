@@ -16,6 +16,12 @@ Thumbs.db
 *.swp
 *.orig
 
+# Node toolchain logs and coverage, in case a helper script is ever added.
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+coverage/
+
 # Playwright capture artifacts.
 playwright-report/
 test-results/

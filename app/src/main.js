@@ -1,5 +1,5 @@
 // main.js — wires the editor UI to the cover engine (./cover.js). A `?shot=`
-// query hands control to ./shots.js instead, which sets up a fixed scene for a
+// query hands control to ./shots.js instead, which stages a fixed scene for a
 // screenshot capture.
 
 import { renderCover, panelAt, panelLayout, PANEL_MIN, PANEL_MAX } from './cover.js';
@@ -51,8 +51,8 @@ const state = {
 // Varied defaults so a fresh collage already looks composed, not tiled.
 const PANEL_DEFAULTS = [
   { zoom: 1.5, ox: -0.35, oy: 0.18 },
-  { zoom: 1.8, ox: 0.30, oy: -0.20 },
-  { zoom: 1.45, ox: -0.10, oy: 0.32 },
+  { zoom: 1.8, ox: 0.3, oy: -0.2 },
+  { zoom: 1.45, ox: -0.1, oy: 0.32 },
   { zoom: 1.9, ox: 0.25, oy: 0.12 },
   { zoom: 1.6, ox: -0.28, oy: -0.28 },
 ];
@@ -72,7 +72,7 @@ function coverState() {
   };
 }
 
-/** A fresh panel object, using the photo list round-robin when it has any. */
+/** A fresh panel object, round-robining the photo list when it has any. */
 function makePanel(index) {
   const d = PANEL_DEFAULTS[index % PANEL_DEFAULTS.length];
   return {

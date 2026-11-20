@@ -4,10 +4,11 @@
 
 Built for the make.fun bounty [gta6-cover-art-01](https://make.fun/bounty/gta6-cover-art-01).
 
-Current version: **v1.1.0** — this pass adds organic palm silhouettes, a banded
-retro sun, arrow-key panel navigation and double-click crop reset, on top of
-balanced two-line captions, sharper exports and smoother buttons. Fully
-offline, no build step.
+Current version: **v1.2.0** — this pass rewrites the cover engine and editor
+wiring from scratch (same behaviour), adds a memoized caption-measure cache so
+drag/grade ticks re-render faster, an outline on the smaller caption line for
+legibility over bright skies, a retina-safe 2x cap on shot canvases, and a
+branded favicon. Fully offline, no build step.
 
 # Vice Cover
 

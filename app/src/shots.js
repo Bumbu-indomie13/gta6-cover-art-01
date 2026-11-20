@@ -45,7 +45,9 @@ export async function runShot(shot, query, api) {
     // Match the canvas backing store to the viewport, scaled by the device
     // pixel ratio, so a capture stays crisp on a retina screen (and byte-stable
     // at DPR 1 in a headless browser).
-    const dpr = window.devicePixelRatio || 1;
+    // Cap the ratio at 2 so a 4K/retina viewport never forces a 4x canvas that
+    // would be slower to paint and huge to encode — 2x is already retina-sharp.
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
     api.canvas.width = Math.round(window.innerWidth * dpr);
     api.canvas.height = Math.round(window.innerHeight * dpr);
   }

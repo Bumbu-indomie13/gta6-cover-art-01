@@ -179,6 +179,26 @@ input[type="text"]:focus { outline: 2px solid var(--accent); outline-offset: -1p
 .slider span { text-align: right; color: var(--text); font-variant-numeric: tabular-nums; }
 input[type="range"] { accent-color: var(--accent); width: 100%; }
 
+/* Cross-browser thumb styling so the warmth/zoom/pan sliders match the neon
+   palette instead of falling back to each browser's default grey knob. */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #12070f;
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #12070f;
+  cursor: pointer;
+}
+
 button {
   font: inherit;
   font-weight: 700;

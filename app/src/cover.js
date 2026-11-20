@@ -1,44 +1,41 @@
 // cover.js — the poster renderer for Vice Cover.
 //
-// A list of photos (one per diagonal panel) plus a caption is turned into a
-// GTA-style cover poster. Each panel keeps its own crop, zoom and offset; the
-// whole canvas sits under a single warm sunset grade with palm silhouettes and
-// a retro slitted sun, then a halftone + film-grain print texture, a soft
-// vignette, a double print border and a bold condensed caption. Pure 2D canvas,
-// no libraries, no network, fully offline.
+// Turns a list of panel photos and a caption into a GTA-style cover poster.
+// Every panel is a diagonal slice with its own crop, zoom and offset; the
+// composed canvas is then finished with a warm sunset grade, palm silhouettes,
+// a slitted retro sun, a halftone + film-grain print texture, a vignette, a
+// double print border and a bold condensed caption. Pure 2D canvas — no
+// libraries, no network, fully offline.
 //
-// renderCover paints onto whatever canvas it is handed, at that canvas's own
-// pixel size, so the live preview and the 1080 / 1350 / 1920 PNG exports all
-// flow through this one code path and stay composition-identical.
+// renderCover paints onto whichever canvas it is handed, at that canvas's own
+// pixel size, so the live preview and the 1080x1080 / 1080x1350 / 1920x1080
+// exports all pass through this single code path and stay composition-identical.
 
 export const PANEL_MIN = 3;
 export const PANEL_MAX = 5;
 
-// The caption face: Anton, shipped locally under app/assets/ (OFL 1.1). The
-// fallbacks keep text readable until the webfont has decoded.
-const CAPTION_FACE = '"Anton", "Arial Narrow", sans-serif';
+// ---------------------------------------------------------------------------
+// Tuning — every knob that shapes the look lives here, so retuning the grade
+// or the composition is a one-stop change rather than a hunt through the file.
+// ---------------------------------------------------------------------------
 
-// Sunset palette, sky -> horizon. One place to retune the grade without
-// hunting through the file. The magenta stays rose (never hot pink) so the
-// wash warms the art instead of reddening it.
-const PALETTE = {
+// Sunset palette, top of the wash down to the horizon.
+const GRADE = {
   sky: '#2a0e3f',
-  magenta: '#e0527d',
+  magenta: '#e0527d', // rose, never hot pink, so the wash warms instead of reddening
   orange: '#ff8c42',
   gold: '#ffd166',
 };
 
-// How far the diagonal slices lean, as a fraction of the canvas width.
+// How far the diagonal cuts lean, as a fraction of the canvas width.
 const SLANT = 0.16;
 
-// The grade strength used when the caller hands none. Named so the default
-// lives beside the code that reads it, not as a bare number at a call site.
+// The warmth used when the caller hands none.
 const DEFAULT_WARMTH = 60;
 
-// Composition anchors, as fractions of the canvas, so the layout is retunable
-// from one place (mirroring PALETTE and SLANT above).
-const SUN_X = 0.74;
-const SUN_Y = 0.3;
+// Layout anchors, as fractions of the canvas, so the composition is tunable
+// from one place (mirroring GRADE and SLANT).
+const SUN = { x: 0.74, y: 0.3, r: 0.16 };
 const CAPTION_BASELINE = 0.88;
 const PALM_BASE = 1.02;
 const PALMS = [
@@ -46,23 +43,27 @@ const PALMS = [
   { x: 0.94, height: 0.42, lean: -0.08 },
 ];
 
+// The caption face: Anton, vendored locally under app/assets/ (OFL 1.1). The
+// fallbacks keep text readable until the webfont has decoded.
+const CAPTION_FACE = '"Anton", "Arial Narrow", sans-serif';
+
 // ---------------------------------------------------------------------------
-// Helpers
+// Small helpers
 // ---------------------------------------------------------------------------
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-// A tiny deterministic PRNG (splitmix-style). The grain tile resets the seed
-// before it fills, so the exported poster is byte-stable for identical inputs
-// across runs and render order.
+// A tiny deterministic PRNG (splitmix-style). The grain tile reseeds before it
+// fills, so the exported poster is byte-stable for identical inputs across
+// runs and render order.
 let grainSeed = 0x9e3779b9;
-const rand01 = () => {
+function rand01() {
   grainSeed = (grainSeed * 1664525 + 1013904223) >>> 0;
   return grainSeed / 0xffffffff;
-};
+}
 
 // Patterns are cached per context (keyed by tile size), so the preview canvas
-// and every export canvas build their own — never a pattern borrowed from a
+// and each export canvas build their own — never a pattern borrowed from a
 // canvas that has since been resized or discarded.
 const patternCache = new WeakMap();
 
@@ -128,9 +129,31 @@ export function panelAt(x, y, w, h, n) {
 // ---------------------------------------------------------------------------
 
 /**
- * Clip to a panel's parallelogram and draw `img` cover-fit inside it, scaled
+ * The cover-fit destination rect for `img` drawn across a w x h canvas, scaled
  * by zoom (>= 1) and panned by ox/oy (each in [-1, 1], a fraction of the
- * overflow along that axis). A missing or not-yet-decoded image falls back to a
+ * overflow along that axis). Centralised so the geometry is computed once and
+ * read the same way in the editor and the exports.
+ */
+function coverRect(img, w, h, zoom, ox, oy) {
+  const z = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
+  const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight) * z;
+  const iw = img.naturalWidth * scale;
+  const ih = img.naturalHeight * scale;
+  const oxf = clamp(Number.isFinite(ox) ? ox : 0, -1, 1);
+  const oyf = clamp(Number.isFinite(oy) ? oy : 0, -1, 1);
+  // Centre the cover-fit image, then shift by the pan fraction of the overflow
+  // along each axis (zero when the image fills the canvas exactly).
+  return {
+    dx: (w - iw) / 2 + (oxf * (iw - w)) / 2,
+    dy: (h - ih) / 2 + (oyf * (ih - h)) / 2,
+    iw,
+    ih,
+  };
+}
+
+/**
+ * Clip to a panel's parallelogram and draw `img` cover-fit inside it, scaled by
+ * zoom and panned by ox/oy. A missing or not-yet-decoded image falls back to a
  * sunset placeholder so a fresh poster never shows an empty strip.
  */
 function drawPanelPhoto(ctx, img, poly, zoom, ox, oy) {
@@ -142,17 +165,7 @@ function drawPanelPhoto(ctx, img, poly, zoom, ox, oy) {
   ctx.clip();
 
   if (img && img.naturalWidth > 0) {
-    const z = Math.max(1, Number.isFinite(zoom) ? zoom : 1);
-    const scale = Math.max(w / img.naturalWidth, h / img.naturalHeight) * z;
-    const iw = img.naturalWidth * scale;
-    const ih = img.naturalHeight * scale;
-    const oxf = clamp(Number.isFinite(ox) ? ox : 0, -1, 1);
-    const oyf = clamp(Number.isFinite(oy) ? oy : 0, -1, 1);
-    // Centre the cover-fit image, then shift by the pan fraction of the
-    // overflow along each axis (the difference between the drawn and canvas
-    // sizes — zero when the image fills the canvas exactly).
-    const dx = (w - iw) / 2 + (oxf * (iw - w)) / 2;
-    const dy = (h - ih) / 2 + (oyf * (ih - h)) / 2;
+    const { dx, dy, iw, ih } = coverRect(img, w, h, zoom, ox, oy);
     // High-quality smoothing keeps the 1920-wide export crisp when the source
     // photo is upscaled by zoom; the preview benefits from the same setting.
     ctx.imageSmoothingEnabled = true;
@@ -176,9 +189,9 @@ function tracePolygon(ctx, poly) {
 /** A warm gradient stand-in for panels that have no photo yet. */
 function drawPlaceholder(ctx, w, h) {
   const g = ctx.createLinearGradient(0, 0, 0, h);
-  g.addColorStop(0, PALETTE.sky);
-  g.addColorStop(0.6, PALETTE.magenta);
-  g.addColorStop(1, PALETTE.orange);
+  g.addColorStop(0, GRADE.sky);
+  g.addColorStop(0.6, GRADE.magenta);
+  g.addColorStop(1, GRADE.orange);
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, w, h);
 }
@@ -202,10 +215,10 @@ function applyGrade(ctx, w, h, warmth) {
   ctx.save();
 
   const wash = ctx.createLinearGradient(0, 0, 0, h);
-  wash.addColorStop(0, PALETTE.sky);
-  wash.addColorStop(0.5, PALETTE.magenta);
-  wash.addColorStop(0.82, PALETTE.orange);
-  wash.addColorStop(1, PALETTE.gold);
+  wash.addColorStop(0, GRADE.sky);
+  wash.addColorStop(0.5, GRADE.magenta);
+  wash.addColorStop(0.82, GRADE.orange);
+  wash.addColorStop(1, GRADE.gold);
   ctx.globalCompositeOperation = 'overlay';
   ctx.globalAlpha = 0.28 + 0.18 * strength;
   ctx.fillStyle = wash;
@@ -228,9 +241,9 @@ function applyGrade(ctx, w, h, warmth) {
 
 /** A retro sun with horizontal slits, drawn as a soft bloom over the panels. */
 function drawSun(ctx, w, h) {
-  const cx = w * SUN_X;
-  const cy = h * SUN_Y;
-  const r = Math.min(w, h) * 0.16;
+  const cx = w * SUN.x;
+  const cy = h * SUN.y;
+  const r = Math.min(w, h) * SUN.r;
 
   // Soft outer bloom, faint enough that it lights the right side without
   // flattening the photos underneath.
@@ -328,7 +341,7 @@ function drawHalftone(ctx, w, h) {
   if (!pattern) return;
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
-  ctx.globalAlpha = 0.10;
+  ctx.globalAlpha = 0.1;
   ctx.fillStyle = pattern;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();
@@ -338,7 +351,7 @@ function drawHalftone(ctx, w, h) {
 function drawGrain(ctx, w, h) {
   const pattern = cachedPattern(ctx, 128, (d, cell) => {
     // A fresh, fixed seed makes the noise tile — and therefore the export —
-    // byte-identical on every run, whatever renders happened before.
+    // byte-identical on every run, whatever rendered beforehand.
     grainSeed = 0x9e3779b9;
     const id = d.createImageData(cell, cell);
     for (let i = 0; i < id.data.length; i += 4) {
@@ -394,6 +407,21 @@ function drawBorder(ctx, w, h) {
 // Caption
 // ---------------------------------------------------------------------------
 
+// measureText is surprisingly expensive in the shrink loops below, and the
+// caption is re-laid-out on every frame (each warmth or drag tick). A small
+// memo keyed by font + text turns those repeated measurements into map lookups.
+const measureCache = new Map();
+function measure(ctx, text, font) {
+  const key = `${font}\u0000${text}`;
+  let w = measureCache.get(key);
+  if (w === undefined) {
+    ctx.font = font;
+    w = ctx.measureText(text).width;
+    measureCache.set(key, w);
+  }
+  return w;
+}
+
 /**
  * Lays out the main caption as one line, or two stacked lines when a single
  * line would have to shrink below a readable size. Returns
@@ -401,12 +429,8 @@ function drawBorder(ctx, w, h) {
  */
 function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
   let size = startSize;
-  ctx.font = `${size}px ${face}`;
-  while (ctx.measureText(text).width > maxW && size > minSize) {
-    size -= 1;
-    ctx.font = `${size}px ${face}`;
-  }
-  if (ctx.measureText(text).width <= maxW) return { lines: [text], size };
+  while (measure(ctx, text, `${size}px ${face}`) > maxW && size > minSize) size -= 1;
+  if (measure(ctx, text, `${size}px ${face}`) <= maxW) return { lines: [text], size };
 
   const words = text.split(/\s+/).filter(Boolean);
   if (words.length < 2) return { lines: [text], size };
@@ -416,13 +440,13 @@ function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
   // widths) so a wrapped title reads as a centred block instead of a long first
   // line with a short tail.
   for (let s = startSize; s >= minSize; s--) {
-    ctx.font = `${s}px ${face}`;
+    const font = `${s}px ${face}`;
     let best = null;
     for (let split = 1; split < words.length; split++) {
       const a = words.slice(0, split).join(' ');
       const b = words.slice(split).join(' ');
-      const wa = ctx.measureText(a).width;
-      const wb = ctx.measureText(b).width;
+      const wa = measure(ctx, a, font);
+      const wb = measure(ctx, b, font);
       if (wa <= maxW && wb <= maxW) {
         const balance = Math.abs(wa - wb);
         if (best === null || balance < best.balance) best = { a, b, balance };
@@ -442,11 +466,7 @@ function layoutCaption(ctx, text, startSize, maxW, face, minSize = 6) {
 /** Shrink a font size until `text` fits within `maxW`; returns the fitted size. */
 function shrinkToFit(ctx, text, startSize, maxW, face) {
   let size = startSize;
-  ctx.font = `${size}px ${face}`;
-  while (ctx.measureText(text).width > maxW && size > 6) {
-    size -= 1;
-    ctx.font = `${size}px ${face}`;
-  }
+  while (measure(ctx, text, `${size}px ${face}`) > maxW && size > 6) size -= 1;
   return size;
 }
 
@@ -498,9 +518,15 @@ function drawCaption(ctx, w, h, caption, sub) {
     ctx.font = `${size}px ${face}`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'alphabetic';
+    // A thin dark outline behind the orange fill keeps the smaller line legible
+    // over bright skies, matching the main caption's outline treatment.
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(1, size * 0.08);
+    ctx.strokeStyle = '#1a0a1f';
     ctx.fillStyle = '#ff9e4a';
     ctx.shadowColor = 'rgba(0, 0, 0, 0.6)';
     ctx.shadowBlur = size * 0.2;
+    ctx.strokeText(subText, w / 2, subBaseline);
     ctx.fillText(subText, w / 2, subBaseline);
     ctx.restore();
   }
