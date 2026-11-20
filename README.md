@@ -4,9 +4,10 @@
 
 Built for the make.fun bounty [gta6-cover-art-01](https://make.fun/bounty/gta6-cover-art-01).
 
-Current version: **v1.1.0** — polish pass: balanced two-line caption splits,
-sharper export upscaling, smoother button feedback, and a clearer subtitle
-label. Fully offline, no build step.
+Current version: **v1.1.0** — this pass adds organic palm silhouettes, a banded
+retro sun, arrow-key panel navigation and double-click crop reset, on top of
+balanced two-line captions, sharper exports and smoother buttons. Fully
+offline, no build step.
 
 # Vice Cover
 
@@ -20,7 +21,8 @@ PNG at 1080x1080, 1080x1350 or 1920x1080.
 
 - Diagonal sliced panels (3-5), each panel with its own crop, zoom and pan.
   Click a panel to select it, drag directly on the poster to pan its photo, or
-  use the zoom / pan X / pan Y sliders.
+  use the zoom / pan X / pan Y sliders. Double-click the poster to reset the
+  selected panel's crop, and use the arrow keys to step between panels.
 - Warm sunset grade (sky -> magenta -> orange -> gold) blended over each panel in
   overlay, plus a plum multiply along the bottom, so neighbouring strips read as
   one balanced sunset instead of a row of tinted frames.

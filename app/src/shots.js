@@ -42,9 +42,12 @@ export async function runShot(shot, query, api) {
 
   if (shot === 'cover') {
     document.body.classList.add('shot-cover');
-    // Match the canvas backing store to the viewport for a crisp 1:1 capture.
-    api.canvas.width = window.innerWidth;
-    api.canvas.height = window.innerHeight;
+    // Match the canvas backing store to the viewport, scaled by the device
+    // pixel ratio, so a capture stays crisp on a retina screen (and byte-stable
+    // at DPR 1 in a headless browser).
+    const dpr = window.devicePixelRatio || 1;
+    api.canvas.width = Math.round(window.innerWidth * dpr);
+    api.canvas.height = Math.round(window.innerHeight * dpr);
   }
 
   try { await api.fontsReady(); } catch { /* fall back to system font */ }

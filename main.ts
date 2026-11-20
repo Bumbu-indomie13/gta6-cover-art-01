@@ -65,6 +65,9 @@ const shotNames = existsSync(join(repoRoot, 'screenshots'))
       .filter((n) => !n.startsWith('.') && IMAGE_EXT.test(n))
       .sort()
   : [];
+if (shotNames.length < 3) {
+  console.warn(`  note: screenshots/ holds ${shotNames.length} image${shotNames.length === 1 ? '' : 's'}; an entry wants 3 or 4.`);
+}
 console.log(`Vice Cover v1.1.0 entry written to ${outDir}`);
 console.log(`  app/          -> ${outDir}/app`);
 console.log(`  screenshots/  -> ${outDir}/screenshots (${shotNames.length} image${shotNames.length === 1 ? '' : 's'})`);

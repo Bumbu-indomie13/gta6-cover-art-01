@@ -1,13 +1,13 @@
 // cover.js — the poster renderer for Vice Cover.
 //
-// Turns a list of photos (one per diagonal panel) plus a caption into a
-// GTA-style cover poster. Every panel carries its own crop / zoom / offset;
-// the whole canvas sits under a single warm sunset grade with palm silhouettes
-// and a retro slitted sun, then halftone + film-grain print texture, a soft
-// vignette, a double print border and a bold condensed caption. Pure 2D canvas
-// — no libraries, no network, fully offline.
+// A list of photos (one per diagonal panel) plus a caption is turned into a
+// GTA-style cover poster. Each panel keeps its own crop, zoom and offset; the
+// whole canvas sits under a single warm sunset grade with palm silhouettes and
+// a retro slitted sun, then a halftone + film-grain print texture, a soft
+// vignette, a double print border and a bold condensed caption. Pure 2D canvas,
+// no libraries, no network, fully offline.
 //
-// renderCover paints onto whichever canvas it is handed, at that canvas's own
+// renderCover paints onto whatever canvas it is handed, at that canvas's own
 // pixel size, so the live preview and the 1080 / 1350 / 1920 PNG exports all
 // flow through this one code path and stay composition-identical.
 
@@ -18,9 +18,9 @@ export const PANEL_MAX = 5;
 // fallbacks keep text readable until the webfont has decoded.
 const CAPTION_FACE = '"Anton", "Arial Narrow", sans-serif';
 
-// Sunset palette, sky -> horizon. Keeping these in one place means the grade
-// can be retuned without hunting through the file. The magenta stays on the
-// rose side (never a hot pink) so the wash warms the art instead of reddening it.
+// Sunset palette, sky -> horizon. One place to retune the grade without
+// hunting through the file. The magenta stays rose (never hot pink) so the
+// wash warms the art instead of reddening it.
 const PALETTE = {
   sky: '#2a0e3f',
   magenta: '#e0527d',
@@ -32,7 +32,7 @@ const PALETTE = {
 const SLANT = 0.16;
 
 // The grade strength used when the caller hands none. Named so the default
-// lives beside the code that reads it, not as a bare number at the call site.
+// lives beside the code that reads it, not as a bare number at a call site.
 const DEFAULT_WARMTH = 60;
 
 // Composition anchors, as fractions of the canvas, so the layout is retunable
@@ -47,18 +47,40 @@ const PALMS = [
 ];
 
 // ---------------------------------------------------------------------------
-// Small utilities
+// Helpers
 // ---------------------------------------------------------------------------
 
 const clamp = (v, lo, hi) => (v < lo ? lo : v > hi ? hi : v);
 
-// A tiny deterministic PRNG (splitmix-style) so the film grain — and therefore
-// the exported poster — is byte-stable for identical inputs across runs.
+// A tiny deterministic PRNG (splitmix-style). The grain tile resets the seed
+// before it fills, so the exported poster is byte-stable for identical inputs
+// across runs and render order.
 let grainSeed = 0x9e3779b9;
 const rand01 = () => {
   grainSeed = (grainSeed * 1664525 + 1013904223) >>> 0;
   return grainSeed / 0xffffffff;
 };
+
+// Patterns are cached per context (keyed by tile size), so the preview canvas
+// and every export canvas build their own — never a pattern borrowed from a
+// canvas that has since been resized or discarded.
+const patternCache = new WeakMap();
+
+function cachedPattern(ctx, cellSize, painter) {
+  let bySize = patternCache.get(ctx);
+  if (!bySize) {
+    bySize = new Map();
+    patternCache.set(ctx, bySize);
+  }
+  if (bySize.has(cellSize)) return bySize.get(cellSize);
+  const tile = document.createElement('canvas');
+  tile.width = cellSize;
+  tile.height = cellSize;
+  painter(tile.getContext('2d'), cellSize);
+  const pattern = ctx.createPattern(tile, 'repeat');
+  bySize.set(cellSize, pattern);
+  return pattern;
+}
 
 // ---------------------------------------------------------------------------
 // Panel geometry
@@ -229,12 +251,16 @@ function drawSun(ctx, w, h) {
   ctx.fillStyle = body;
   ctx.fillRect(cx - r, cy - r, r * 2, r * 2);
 
-  // Horizontal slits — negative space for the retro look.
+  // Horizontal slits — negative space for the retro look. Each slit is inset
+  // from the disc edge and shortens toward the top and bottom, so the sun
+  // reads as a banded disc rather than a circle crossed by full-width bars.
   ctx.fillStyle = 'rgba(42, 14, 63, 0.9)';
   for (let i = 0; i < 4; i++) {
+    const t = i / 3;
     const y = cy + (i - 1.5) * (r * 0.32);
     const sh = r * 0.045 + i * r * 0.02;
-    ctx.fillRect(cx - r, y, r * 2, sh);
+    const inset = r * (0.1 + 0.16 * Math.abs(t - 0.5) * 2);
+    ctx.fillRect(cx - r + inset, y, (r - inset) * 2, sh);
   }
   ctx.restore();
 }
@@ -257,25 +283,30 @@ function drawPalm(ctx, x, baseY, h, lean) {
   ctx.lineWidth = h * 0.09;
   ctx.stroke();
 
-  // Fronds fan upward and outward from the crown.
+  // Fronds fan upward and outward from the crown. The centre fronds reach
+  // highest and the edge fronds droop a little, so the silhouette reads as a
+  // real palm rather than a symmetric starburst.
   const fronds = 7;
   for (let i = 0; i < fronds; i++) {
-    const a = Math.PI * 1.05 + (i / (fronds - 1)) * Math.PI * 0.9;
-    const len = h * 0.34;
+    const t = i / (fronds - 1);
+    const a = Math.PI * 1.05 + t * Math.PI * 0.9;
+    const reach = 0.82 + 0.4 * (1 - Math.abs(t - 0.5) * 1.7);
+    const len = h * 0.34 * reach;
+    const droop = h * 0.06 * Math.abs(t - 0.5) * 2;
     const tipX = crownX + Math.cos(a) * len;
-    const tipY = crownY + Math.sin(a) * len;
+    const tipY = crownY + Math.sin(a) * len + droop;
 
     ctx.beginPath();
     ctx.moveTo(crownX, crownY);
     ctx.quadraticCurveTo(
       crownX + Math.cos(a + 0.25) * len * 0.5,
-      crownY + Math.sin(a + 0.25) * len * 0.5,
+      crownY + Math.sin(a + 0.25) * len * 0.5 + droop * 0.4,
       tipX,
       tipY,
     );
     ctx.quadraticCurveTo(
       crownX + Math.cos(a - 0.25) * len * 0.5,
-      crownY + Math.sin(a - 0.25) * len * 0.5,
+      crownY + Math.sin(a - 0.25) * len * 0.5 + droop * 0.4,
       crownX,
       crownY,
     );
@@ -286,53 +317,44 @@ function drawPalm(ctx, x, baseY, h, lean) {
   ctx.restore();
 }
 
-/** Build (once) and tile a small canvas as a repeating pattern. */
-function tilePattern(ctx, size, painter) {
-  const tile = document.createElement('canvas');
-  tile.width = tile.height = size;
-  painter(tile.getContext('2d'), size);
-  return ctx.createPattern(tile, 'repeat');
-}
-
-let halftonePattern = null;
 /** Halftone dot grid, printed in 'overlay' for a poster-press texture. */
 function drawHalftone(ctx, w, h) {
-  if (!halftonePattern) {
-    halftonePattern = tilePattern(ctx, 6, (d, cell) => {
-      d.fillStyle = 'rgba(255,255,255,0.5)';
-      d.beginPath();
-      d.arc(cell / 2, cell / 2, cell * 0.16, 0, Math.PI * 2);
-      d.fill();
-    });
-  }
+  const pattern = cachedPattern(ctx, 6, (d, cell) => {
+    d.fillStyle = 'rgba(255,255,255,0.5)';
+    d.beginPath();
+    d.arc(cell / 2, cell / 2, cell * 0.16, 0, Math.PI * 2);
+    d.fill();
+  });
+  if (!pattern) return;
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
   ctx.globalAlpha = 0.10;
-  ctx.fillStyle = halftonePattern;
+  ctx.fillStyle = pattern;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();
 }
 
-let grainPattern = null;
 /** Film grain from a noise tile, tiled and blended lightly. */
 function drawGrain(ctx, w, h) {
-  if (!grainPattern) {
-    grainPattern = tilePattern(ctx, 128, (d, cell) => {
-      const id = d.createImageData(cell, cell);
-      for (let i = 0; i < id.data.length; i += 4) {
-        const v = 110 + Math.floor(rand01() * 90);
-        id.data[i] = v;
-        id.data[i + 1] = v;
-        id.data[i + 2] = v;
-        id.data[i + 3] = 18;
-      }
-      d.putImageData(id, 0, 0);
-    });
-  }
+  const pattern = cachedPattern(ctx, 128, (d, cell) => {
+    // A fresh, fixed seed makes the noise tile — and therefore the export —
+    // byte-identical on every run, whatever renders happened before.
+    grainSeed = 0x9e3779b9;
+    const id = d.createImageData(cell, cell);
+    for (let i = 0; i < id.data.length; i += 4) {
+      const v = 110 + Math.floor(rand01() * 90);
+      id.data[i] = v;
+      id.data[i + 1] = v;
+      id.data[i + 2] = v;
+      id.data[i + 3] = 18;
+    }
+    d.putImageData(id, 0, 0);
+  });
+  if (!pattern) return;
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
   ctx.globalAlpha = 0.55;
-  ctx.fillStyle = grainPattern;
+  ctx.fillStyle = pattern;
   ctx.fillRect(0, 0, w, h);
   ctx.restore();
 }

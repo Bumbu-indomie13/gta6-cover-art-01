@@ -4,20 +4,20 @@
     "query": "?shot=cover&photo=pier&caption=SUNSET%20HEIST&sub=WELCOME%20TO%20THE%20COAST&panels=4",
     "w": 1024,
     "h": 1280,
-    "desc": "the 4:5 story cover, full-bleed"
+    "desc": "the 4:5 story cover, full-bleed, captured at 1024x1280 (long side within the 1280 cap)"
   },
   {
     "name": "02-poster-1080x1080.jpg",
     "query": "?shot=cover&photo=boulevard&caption=BOULEVARD&sub=NEON%20COAST&panels=4",
     "w": 1080,
     "h": 1080,
-    "desc": "the square cover, full-bleed"
+    "desc": "the square cover, full-bleed, captured at 1080x1080"
   },
   {
     "name": "03-editor-1440x900.jpg",
     "query": "?shot=editor&photo=pier&caption=SUNSET%20HEIST&sub=WELCOME%20TO%20THE%20COAST&panels=4",
     "w": 1280,
     "h": 800,
-    "desc": "the editor with the pier sample loaded"
+    "desc": "the editor with the pier sample loaded, captured at 1280x800"
   }
 ]

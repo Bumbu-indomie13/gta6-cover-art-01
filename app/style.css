@@ -243,3 +243,9 @@ body.shot-cover #preview {
   box-shadow: none;
   cursor: default;
 }
+
+/* Respect users who ask for less motion: drop the press/pop transitions. */
+@media (prefers-reduced-motion: reduce) {
+  button { transition: none; }
+  button:active { transform: none; }
+}

@@ -144,25 +144,27 @@ function setPanelCount(n) {
 
 function render() {
   renderCover(canvas, coverState());
-  drawPanelOutlines();
+  // The poster is drawn clean for the full-bleed cover capture; the panel
+  // outlines are an editor affordance only, so they are skipped in ?shot=cover.
+  if (!document.body.classList.contains('shot-cover')) drawPanelOutlines();
   syncPanelEditor();
 }
 
-// Thin outline on every panel so the user can see the slices; the selected
-// panel's index tag is surfaced through the editor label.
+// Thin outlines on every panel so the user can see the slices; the selected
+// panel glows brighter and thicker than the rest.
 function drawPanelOutlines() {
   const n = state.panels.length;
   if (!n) return;
   const polys = panelLayout(canvas.width, canvas.height, n);
   ctx.save();
-  ctx.lineWidth = 3;
-  ctx.strokeStyle = 'rgba(255, 140, 66, 0.95)';
-  for (const poly of polys) {
+  polys.forEach((poly, i) => {
+    ctx.lineWidth = i === state.active ? 3 : 1.5;
+    ctx.strokeStyle = i === state.active ? 'rgba(255, 214, 140, 0.95)' : 'rgba(255, 140, 66, 0.55)';
     ctx.beginPath();
     poly.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.closePath();
     ctx.stroke();
-  }
+  });
   ctx.restore();
 }
 
@@ -218,6 +220,16 @@ function applyPanel() {
   render();
 }
 
+/** Reset the active panel to its default crop/zoom/offset. */
+function resetActivePanel() {
+  const d = PANEL_DEFAULTS[state.active % PANEL_DEFAULTS.length];
+  const p = state.panels[state.active];
+  p.zoom = d.zoom;
+  p.ox = d.ox;
+  p.oy = d.oy;
+  render();
+}
+
 function selectPanel(i) {
   state.active = clamp(i, 0, state.panels.length - 1);
   render(); // render() syncs the panel editor as its last step
@@ -228,6 +240,7 @@ function selectPanel(i) {
 // ---------------------------------------------------------------------------
 
 let dragging = null; // { startX, startY, startOx, startOy }
+let dragFrame = null; // pending requestAnimationFrame id while dragging
 
 function eventPos(e) {
   const r = canvas.getBoundingClientRect();
@@ -257,11 +270,35 @@ canvas.addEventListener('pointermove', (e) => {
   p.ox = clamp(dragging.startOx + ((x - dragging.startX) / canvas.width) * 2, -1, 1);
   p.oy = clamp(dragging.startOy + ((y - dragging.startY) / canvas.height) * 2, -1, 1);
   e.preventDefault();
-  render();
+  // Coalesce redraws into one per animation frame, so a fast drag never runs
+  // the full render several times inside a single frame.
+  if (!dragFrame) dragFrame = requestAnimationFrame(() => (dragFrame = null, render()));
 });
 
-canvas.addEventListener('pointerup', () => { dragging = null; });
-canvas.addEventListener('pointercancel', () => { dragging = null; });
+function endDrag() {
+  dragging = null;
+  if (dragFrame) {
+    cancelAnimationFrame(dragFrame);
+    dragFrame = null;
+    render();
+  }
+}
+
+canvas.addEventListener('pointerup', endDrag);
+canvas.addEventListener('pointercancel', endDrag);
+
+// Double-click resets the active panel to its default crop/zoom/offset.
+canvas.addEventListener('dblclick', resetActivePanel);
+
+// Arrow keys cycle panels, unless the user is typing in a field.
+window.addEventListener('keydown', (e) => {
+  if (e.target instanceof HTMLInputElement) return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+    selectPanel(state.active - 1);
+  } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+    selectPanel(state.active + 1);
+  }
+});
 
 // ---------------------------------------------------------------------------
 // Export

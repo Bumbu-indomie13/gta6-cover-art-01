@@ -1,5 +1,5 @@
 Anton Regular (https://github.com/googlefonts/AntonFont.git) is vendored,
-unmodified, for Vice Cover at app/assets/Anton-Regular.ttf under this license.
+unmodified, for Vice Cover at app/assets/Anton-Regular.ttf under this license; only the Regular weight is bundled, and the app loads it as font-family "Anton" via @font-face in style.css.
 
 Copyright 2020 The Anton Project Authors (https://github.com/googlefonts/AntonFont.git)
 
